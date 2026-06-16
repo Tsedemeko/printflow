@@ -1,13 +1,38 @@
 services:
   - type: web
-    name: printflow-api
-    env: node
-    plan: starter
-    rootDir: apps/api
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
+    name: finesse-api
+    runtime: node
+    plan: free
+    # Build at the repo root so the @printflow/shared workspace links and is compiled first.
+    buildCommand: npm install && npm run build -w @printflow/shared && npm run build -w @printflow/api
+    startCommand: node apps/api/dist/server.js
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: API_PORT
-        value: 10000
+      - key: NODE_VERSION
+        value: "20"
+      # Auto-generated secret used to sign staff app tokens.
+      - key: APP_AUTH_SECRET
+        generateValue: true
+      # Public URL of the deployed web app (used in SMS/email links). Update after the Vercel deploy.
+      - key: PUBLIC_WEB_URL
+        value: https://your-web-app.vercel.app
+      # NOTE: free plan has no persistent disk, so the local file store resets on each
+      # deploy/restart. Connect Supabase (below) for durable data.
+      # ---- Optional integrations: add in the Render dashboard when available ----
+      # - key: SUPABASE_URL
+      #   sync: false
+      # - key: SUPABASE_SERVICE_ROLE_KEY
+      #   sync: false
+      # - key: PAYFAST_MERCHANT_ID
+      #   sync: false
+      # - key: PAYFAST_MERCHANT_KEY
+      #   sync: false
+      # - key: PAYFAST_PASSPHRASE
+      #   sync: false
+      # - key: YOCO_SECRET_KEY
+      #   sync: false
+      # - key: YOCO_WEBHOOK_SECRET
+      #   sync: false

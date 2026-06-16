@@ -1,147 +1,323 @@
 import type { CatalogProduct } from "./types.js";
 
+const sizes = (extra: Record<string, number> = {}) =>
+  ["S", "M", "L", "XL", "XXL", "3XL"].map((label) => ({ id: label, label, priceDelta: extra[label] ?? (label === "XXL" ? 20 : label === "3XL" ? 40 : 0) }));
+
 export const catalog: CatalogProduct[] = [
+  // ---------------- Apparel & Sublimation ----------------
   {
     id: "apparel-tshirt",
     category: "apparel",
     department: "apparel_heat_press",
-    name: "Custom T-Shirt",
-    description: "T-shirts with placement choices for front, back, chest, and sleeves.",
-    basePrice: 120,
+    name: "Round / V-Neck T-Shirt",
+    description: "Sublimated round or V-neck T-shirt. Short or long sleeve. (Design/set-up fee R150 may apply.)",
+    basePrice: 160,
     unitLabel: "shirt",
     requiresArtwork: true,
     proofRecommended: true,
     inventoryTags: ["blank-shirt", "transfer-paper", "ink"],
     options: {
-      size: ["S", "M", "L", "XL", "XXL"].map((label) => ({ id: label, label, priceDelta: label === "XXL" ? 20 : 0 })),
-      color: ["White", "Black", "Navy", "Red"].map((label) => ({ id: label, label, priceDelta: 0 })),
-      placement: [
-        { id: "left_chest", label: "Left Chest", priceDelta: 35 },
-        { id: "full_front", label: "Full Front", priceDelta: 70 },
-        { id: "full_back", label: "Full Back", priceDelta: 80 },
-        { id: "sleeve", label: "Sleeve", priceDelta: 40 }
-      ]
+      neck: [
+        { id: "round", label: "Round Neck", priceDelta: 0 },
+        { id: "v", label: "V-Neck", priceDelta: 0 }
+      ],
+      sleeve: [
+        { id: "short", label: "Short Sleeve", priceDelta: 0 },
+        { id: "long", label: "Long Sleeve", priceDelta: 40 }
+      ],
+      size: sizes()
     }
   },
   {
-    id: "document-business-cards",
-    category: "document",
-    department: "document_printing",
-    name: "Business Cards",
-    description: "Professional cards with paper stock, sides, and finishing options.",
-    basePrice: 2.5,
-    unitLabel: "card",
+    id: "apparel-golf-shirt",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Golf Shirt",
+    description: "Sublimated golf/collared shirt. Short or long sleeve.",
+    basePrice: 180,
+    unitLabel: "shirt",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["paper-stock", "laminating-pouch"],
+    inventoryTags: ["blank-golf-shirt", "transfer-paper", "ink"],
     options: {
-      paper: [
-        { id: "matte_250", label: "250gsm Matte", priceDelta: 0.5 },
-        { id: "gloss_250", label: "250gsm Gloss", priceDelta: 0.8 },
-        { id: "premium_350", label: "350gsm Premium", priceDelta: 1.5 }
+      sleeve: [
+        { id: "short", label: "Short Sleeve", priceDelta: 0 },
+        { id: "long", label: "Long Sleeve", priceDelta: 50 }
       ],
-      sides: [
-        { id: "single", label: "Single Sided", priceDelta: 0 },
-        { id: "double", label: "Double Sided", priceDelta: 1.2 }
-      ],
-      finishing: [
-        { id: "none", label: "No Finishing", priceDelta: 0 },
-        { id: "laminated", label: "Laminated", priceDelta: 1.5 },
-        { id: "corner_rounding", label: "Corner Rounding", priceDelta: 0.7 }
-      ]
+      size: sizes()
     }
   },
   {
-    id: "document-flyers",
-    category: "document",
-    department: "document_printing",
-    name: "Flyers & Leaflets",
-    description: "A6, A5, A4, DL flyers with paper, sides, folding, and finish choices.",
-    basePrice: 3.5,
-    unitLabel: "flyer",
+    id: "apparel-hoodie",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Hoodie / Sweater",
+    description: "Custom hoodie or sweater with sublimation or print.",
+    basePrice: 350,
+    unitLabel: "hoodie",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["paper-stock", "ink"],
-    enabled: true,
-    options: {
-      size: [
-        { id: "a6", label: "A6", priceDelta: 0 },
-        { id: "dl", label: "DL", priceDelta: 0.5 },
-        { id: "a5", label: "A5", priceDelta: 1.2 },
-        { id: "a4", label: "A4", priceDelta: 2.4 }
-      ],
-      paper: [
-        { id: "bond_80", label: "80gsm Bond", priceDelta: 0 },
-        { id: "gloss_135", label: "135gsm Gloss", priceDelta: 1 },
-        { id: "gloss_170", label: "170gsm Gloss", priceDelta: 1.8 }
-      ],
-      sides: [
-        { id: "single", label: "Single Sided", priceDelta: 0 },
-        { id: "double", label: "Double Sided", priceDelta: 1.2 }
-      ]
-    }
+    inventoryTags: ["blank-hoodie", "transfer-paper", "ink"],
+    options: { size: sizes() }
   },
   {
-    id: "document-booklets",
-    category: "document",
-    department: "document_printing",
-    name: "Booklets & Brochures",
-    description: "Stapled or folded booklets, company profiles, manuals, and menus.",
-    basePrice: 18,
-    unitLabel: "booklet",
-    requiresArtwork: true,
-    proofRecommended: true,
-    inventoryTags: ["paper-stock", "staples", "ink"],
-    enabled: true,
-    options: {
-      size: [
-        { id: "a5", label: "A5", priceDelta: 0 },
-        { id: "a4", label: "A4", priceDelta: 8 }
-      ],
-      pages: [
-        { id: "8pp", label: "8 Pages", priceDelta: 0 },
-        { id: "16pp", label: "16 Pages", priceDelta: 18 },
-        { id: "32pp", label: "32 Pages", priceDelta: 46 }
-      ],
-      binding: [
-        { id: "saddle_stitch", label: "Saddle Stitch", priceDelta: 0 },
-        { id: "wire_bound", label: "Wire Bound", priceDelta: 22 }
-      ]
-    }
-  },
-  {
-    id: "canvas-framed",
-    category: "canvas_photo",
-    department: "canvas_photo",
-    name: "Framed Canvas Print",
-    description: "High-resolution canvas with depth, edge, and frame choices.",
+    id: "apparel-jacket",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Jacket / Matric Jacket",
+    description: "Custom jacket or matric jacket with names and badges.",
     basePrice: 450,
-    unitLabel: "canvas",
+    unitLabel: "jacket",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["canvas-roll", "stretcher-bar", "frame", "ink"],
+    inventoryTags: ["blank-jacket", "transfer-paper", "thread"],
+    options: { size: sizes() }
+  },
+  {
+    id: "apparel-tracksuit",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Tracksuit",
+    description: "Full custom sublimated tracksuit (top and bottoms).",
+    basePrice: 950,
+    unitLabel: "set",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["blank-tracksuit", "transfer-paper"],
+    options: { size: sizes() }
+  },
+  {
+    id: "apparel-sports-kit",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Soccer / Basketball Kit Set",
+    description: "Sublimated sports kit set (jersey and shorts).",
+    basePrice: 360,
+    unitLabel: "set",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["blank-kit", "transfer-paper"],
     options: {
-      size: [
-        { id: "a4", label: "A4", priceDelta: 0 },
-        { id: "a3", label: "A3", priceDelta: 180 },
-        { id: "a2", label: "A2", priceDelta: 350 },
-        { id: "24x36", label: "24x36 inch", priceDelta: 650 }
+      sport: [
+        { id: "soccer", label: "Soccer", priceDelta: 0 },
+        { id: "basketball", label: "Basketball", priceDelta: 0 },
+        { id: "netball", label: "Netball", priceDelta: 0 }
       ],
-      depth: [
-        { id: "18mm", label: "Standard 18mm", priceDelta: 0 },
-        { id: "38mm", label: "Chunky 38mm", priceDelta: 150 }
+      size: sizes()
+    }
+  },
+  {
+    id: "apparel-sports-dress",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Custom / Sports Dress",
+    description: "Custom sublimated sports or corporate dress.",
+    basePrice: 340,
+    unitLabel: "dress",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["blank-dress", "transfer-paper"],
+    options: { size: sizes() }
+  },
+  {
+    id: "apparel-school-uniform",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "School Uniform (Sublimation)",
+    description: "Sublimated school uniform items — shirts, golf shirts, tracksuits, and dresses.",
+    basePrice: 160,
+    unitLabel: "item",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["blank-shirt", "transfer-paper"],
+    options: {
+      item: [
+        { id: "shirt", label: "School Shirt", priceDelta: 0 },
+        { id: "golf", label: "School Golf Shirt", priceDelta: 20 },
+        { id: "dress", label: "School Dress", priceDelta: 180 },
+        { id: "tracksuit", label: "School Tracksuit", priceDelta: 790 }
       ],
-      edge: [
-        { id: "mirror", label: "Mirror Wrap", priceDelta: 0 },
-        { id: "white", label: "White Edge", priceDelta: 0 },
-        { id: "black", label: "Black Edge", priceDelta: 0 },
-        { id: "image", label: "Image Wrap", priceDelta: 80 }
-      ],
-      frame: [
-        { id: "none", label: "No Frame", priceDelta: 0 },
-        { id: "black", label: "Black Frame", priceDelta: 220 },
-        { id: "white", label: "White Frame", priceDelta: 220 },
-        { id: "floating", label: "Floating Frame", priceDelta: 250 }
+      size: sizes()
+    }
+  },
+  {
+    id: "sublimation-per-metre",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Sublimation (per metre)",
+    description: "Sublimation printing charged per metre of fabric.",
+    basePrice: 70,
+    unitLabel: "metre",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["sublimation-fabric", "ink"],
+    options: {}
+  },
+  {
+    id: "apparel-bucket-hat",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Bucket Hat",
+    description: "Branded bucket hat. Bulk pricing available.",
+    basePrice: 150,
+    unitLabel: "hat",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["blank-hat", "transfer-paper"],
+    options: {
+      color: ["White", "Black", "Khaki"].map((label) => ({ id: label.toLowerCase(), label, priceDelta: 0 }))
+    }
+  },
+  {
+    id: "apparel-tie-sash-scarf",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Tie / Sash / Scarf",
+    description: "Custom printed tie, sash, or scarf.",
+    basePrice: 130,
+    unitLabel: "item",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["blank-accessory", "transfer-paper"],
+    options: {
+      item: [
+        { id: "tie", label: "Tie", priceDelta: 0 },
+        { id: "sash", label: "Sash", priceDelta: 0 },
+        { id: "scarf", label: "Scarf", priceDelta: 0 }
+      ]
+    }
+  },
+  {
+    id: "apparel-doek",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Doek / Chiffon",
+    description: "Custom printed doek or chiffon.",
+    basePrice: 100,
+    unitLabel: "item",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["chiffon-fabric", "ink"],
+    options: {}
+  },
+
+  // ---------------- Embroidery, Fashion & Tailoring (quoted on consultation) ----------------
+  {
+    id: "apparel-embroidery",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Embroidery (Logo / Badge / Name)",
+    description: "Embroidered logos, names, and badges on garments, caps, and workwear. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "item",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["thread"],
+    options: {
+      placement: [
+        { id: "left_chest", label: "Left Chest", priceDelta: 0 },
+        { id: "full_back", label: "Full Back", priceDelta: 0 },
+        { id: "cap", label: "Cap", priceDelta: 0 },
+        { id: "sleeve", label: "Sleeve", priceDelta: 0 }
+      ]
+    }
+  },
+  {
+    id: "apparel-overalls",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Overalls & Workwear",
+    description: "Branded overalls and uniforms for teams, sites, and businesses. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "item",
+    requiresArtwork: false,
+    proofRecommended: false,
+    inventoryTags: ["blank-overall", "thread"],
+    options: { size: sizes() }
+  },
+  {
+    id: "apparel-jumpsuit",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Jumpsuit",
+    description: "Custom-fitted jumpsuits made and finished to your spec. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "jumpsuit",
+    requiresArtwork: false,
+    proofRecommended: false,
+    inventoryTags: ["fabric"],
+    options: { size: sizes() }
+  },
+  {
+    id: "fashion-wedding-dress",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Wedding Dress",
+    description: "Bespoke bridal dresses designed, tailored, and fitted with care. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "dress",
+    requiresArtwork: false,
+    proofRecommended: false,
+    inventoryTags: ["fabric"],
+    options: {}
+  },
+  {
+    id: "fashion-traditional-dress",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Traditional Dress",
+    description: "Authentic traditional and cultural attire for every occasion. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "outfit",
+    requiresArtwork: false,
+    proofRecommended: false,
+    inventoryTags: ["fabric"],
+    options: {}
+  },
+  {
+    id: "fashion-trousers",
+    category: "apparel",
+    department: "apparel_heat_press",
+    name: "Trousers (Made-to-Measure / Alterations)",
+    description: "Made-to-measure and altered trousers with a clean finish. Priced on consultation.",
+    basePrice: 0,
+    unitLabel: "pair",
+    requiresArtwork: false,
+    proofRecommended: false,
+    inventoryTags: ["fabric"],
+    options: { size: sizes() }
+  },
+
+  // ---------------- Banners & Signage ----------------
+  {
+    id: "signage-x-banner",
+    category: "signage",
+    department: "signage_banner",
+    name: "X-Banner",
+    description: "Quality X-banner with stand. The best place to be.",
+    basePrice: 550,
+    unitLabel: "banner",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["banner-material", "x-stand"],
+    options: {}
+  },
+  {
+    id: "signage-flag-banner",
+    category: "signage",
+    department: "signage_banner",
+    name: "Flag Banner (Teardrop / Telescopic)",
+    description: "Teardrop or telescopic flag banner with base.",
+    basePrice: 650,
+    unitLabel: "banner",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["flag-material", "flag-pole"],
+    options: {
+      type: [
+        { id: "teardrop", label: "Teardrop", priceDelta: 0 },
+        { id: "telescopic", label: "Telescopic", priceDelta: 0 },
+        { id: "large", label: "Large", priceDelta: 300 }
       ]
     }
   },
@@ -150,152 +326,181 @@ export const catalog: CatalogProduct[] = [
     category: "signage",
     department: "signage_banner",
     name: "Pull-Up Banner",
-    description: "Indoor/outdoor wide-format banner with finishing options.",
-    basePrice: 950,
+    description: "Retractable roll-up banner with carry bag.",
+    basePrice: 1000,
     unitLabel: "banner",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["banner-material", "vinyl-roll", "eyelets"],
+    inventoryTags: ["banner-material", "pullup-cassette"],
     options: {
-      size: [
-        { id: "850x2000", label: "850 x 2000mm", priceDelta: 0 },
-        { id: "1000x2000", label: "1000 x 2000mm", priceDelta: 220 }
-      ],
       material: [
-        { id: "vinyl", label: "Vinyl", priceDelta: 0 },
-        { id: "fabric", label: "Fabric", priceDelta: 180 }
-      ],
-      finishing: [
-        { id: "standard", label: "Standard Cassette", priceDelta: 0 },
-        { id: "premium", label: "Premium Cassette", priceDelta: 320 }
+        { id: "standard", label: "Standard", priceDelta: 0 },
+        { id: "premium", label: "Premium", priceDelta: 250 }
       ]
     }
   },
   {
-    id: "signage-vinyl-cut",
+    id: "signage-popup-wall",
     category: "signage",
     department: "signage_banner",
-    name: "Vinyl Cut Lettering",
-    description: "Window, wall, vehicle, and shopfront vinyl lettering.",
-    basePrice: 220,
-    unitLabel: "job",
+    name: "Pop-Up / Wall Banner (3x3)",
+    description: "3x3 fabric pop-up wall / media backdrop. Comes with bag.",
+    basePrice: 4000,
+    unitLabel: "wall",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["vinyl-roll", "transfer-tape"],
-    enabled: true,
+    inventoryTags: ["popup-frame", "fabric-print"],
+    options: {}
+  },
+  {
+    id: "signage-gazebo",
+    category: "signage",
+    department: "signage_banner",
+    name: "Gazebo (3x3)",
+    description: "Branded 3x3 gazebo. Comes with bag.",
+    basePrice: 4500,
+    unitLabel: "gazebo",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["gazebo-frame", "gazebo-canopy"],
+    options: {}
+  },
+  {
+    id: "signage-corex-board",
+    category: "signage",
+    department: "signage_banner",
+    name: "Corex Board",
+    description: "Printed corex board for events and directions.",
+    basePrice: 250,
+    unitLabel: "board",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["board-stock", "ink"],
     options: {
       size: [
-        { id: "small", label: "Small", priceDelta: 0 },
-        { id: "medium", label: "Medium", priceDelta: 180 },
-        { id: "large", label: "Large", priceDelta: 420 }
-      ],
-      material: [
-        { id: "standard_vinyl", label: "Standard Vinyl", priceDelta: 0 },
-        { id: "premium_vinyl", label: "Premium Vinyl", priceDelta: 90 },
-        { id: "reflective", label: "Reflective Vinyl", priceDelta: 240 }
+        { id: "a2", label: "A2", priceDelta: 0 },
+        { id: "a1", label: "A1", priceDelta: 150 }
       ]
     }
   },
   {
-    id: "signage-correx-board",
+    id: "signage-flag-a1",
     category: "signage",
     department: "signage_banner",
-    name: "Correx & Foam Board Signs",
-    description: "Event, estate agent, directional, and retail display boards.",
-    basePrice: 180,
+    name: "Flag (A1 size)",
+    description: "Printed A1 flag.",
+    basePrice: 250,
+    unitLabel: "flag",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["flag-material"],
+    options: {
+      finish: [
+        { id: "standard", label: "Standard", priceDelta: 0 },
+        { id: "premium", label: "Premium", priceDelta: 200 }
+      ]
+    }
+  },
+
+  // ---------------- Branding & Promo ----------------
+  {
+    id: "promo-table-cloth",
+    category: "promotional",
+    department: "promotional_items",
+    name: "Table Cloth",
+    description: "Branded table cloth in quality material.",
+    basePrice: 250,
+    unitLabel: "cloth",
+    requiresArtwork: true,
+    proofRecommended: true,
+    inventoryTags: ["table-cloth-fabric"],
+    options: {
+      style: [
+        { id: "draped", label: "Draped", priceDelta: 0 },
+        { id: "fitted", label: "Fitted / Stretch", priceDelta: 250 },
+        { id: "full", label: "Full Branding", priceDelta: 650 }
+      ]
+    }
+  },
+  {
+    id: "promo-umbrella",
+    category: "promotional",
+    department: "promotional_items",
+    name: "Branded Umbrella",
+    description: "Branded umbrella, other colours available.",
+    basePrice: 350,
+    unitLabel: "umbrella",
+    requiresArtwork: true,
+    proofRecommended: false,
+    inventoryTags: ["blank-umbrella"],
+    options: {
+      color: ["Black", "Navy", "Red", "White"].map((label) => ({ id: label.toLowerCase(), label, priceDelta: 0 }))
+    }
+  },
+  {
+    id: "promo-oval-board",
+    category: "promotional",
+    department: "promotional_items",
+    name: "Branded Oval Board",
+    description: "Branded oval display board, material of choice.",
+    basePrice: 580,
     unitLabel: "board",
     requiresArtwork: true,
     proofRecommended: true,
-    inventoryTags: ["board-stock", "vinyl-roll", "ink"],
-    enabled: true,
-    options: {
-      size: [
-        { id: "a3", label: "A3", priceDelta: 0 },
-        { id: "a2", label: "A2", priceDelta: 140 },
-        { id: "a1", label: "A1", priceDelta: 360 }
-      ],
-      material: [
-        { id: "correx", label: "Correx", priceDelta: 0 },
-        { id: "foam_board", label: "Foam Board", priceDelta: 120 },
-        { id: "chromadek", label: "Chromadek", priceDelta: 420 }
-      ]
-    }
+    inventoryTags: ["board-stock", "fabric-print"],
+    options: {}
   },
-  {
-    id: "promo-mug",
-    category: "promotional",
-    department: "promotional_items",
-    name: "Custom Mug",
-    description: "Personalized ceramic mug for promotional and gift orders.",
-    basePrice: 90,
-    unitLabel: "mug",
-    requiresArtwork: true,
-    proofRecommended: false,
-    inventoryTags: ["blank-mug", "transfer-paper"],
-    options: {
-      color: ["White", "Black", "Red"].map((label) => ({ id: label, label, priceDelta: label === "White" ? 0 : 15 })),
-      wrap: [
-        { id: "single_side", label: "Single Side", priceDelta: 0 },
-        { id: "full_wrap", label: "Full Wrap", priceDelta: 30 }
-      ]
-    }
-  },
-  {
-    id: "promo-bottle",
-    category: "promotional",
-    department: "promotional_items",
-    name: "Branded Bottles",
-    description: "Water bottles and tumblers with logo placement and colour choices.",
-    basePrice: 145,
-    unitLabel: "bottle",
-    requiresArtwork: true,
-    proofRecommended: true,
-    inventoryTags: ["blank-bottle", "ink"],
-    enabled: true,
-    options: {
-      color: ["White", "Black", "Silver", "Blue"].map((label) => ({ id: label.toLowerCase(), label, priceDelta: label === "Silver" ? 20 : 0 })),
-      placement: [
-        { id: "single_side", label: "Single Side", priceDelta: 0 },
-        { id: "wrap", label: "Wrap", priceDelta: 45 }
-      ]
-    }
-  },
-  {
-    id: "promo-keyholder",
-    category: "promotional",
-    department: "promotional_items",
-    name: "Keyholders & Small Gifts",
-    description: "Keyholders, magnets, badges, phone cases, and branded small gifts.",
-    basePrice: 35,
-    unitLabel: "item",
-    requiresArtwork: true,
-    proofRecommended: false,
-    inventoryTags: ["promo-blanks", "ink"],
-    enabled: true,
-    options: {
-      item: [
-        { id: "keyholder", label: "Keyholder", priceDelta: 0 },
-        { id: "magnet", label: "Magnet", priceDelta: -8 },
-        { id: "badge", label: "Badge", priceDelta: -12 },
-        { id: "phone_case", label: "Phone Case", priceDelta: 55 }
-      ]
-    }
-  },
+
+  // ---------------- Legacy / hidden (kept for compatibility, not offered) ----------------
   {
     id: "quick-photo-frame",
     category: "quick_sale",
     department: "front_counter",
-    name: "Ready-Made Photo Frame",
-    description: "Off-the-shelf item for quick POS sales.",
+    name: "Quick Sale Item",
+    description: "Walk-in / off-the-shelf item for quick POS sales.",
     basePrice: 85,
-    unitLabel: "frame",
+    unitLabel: "item",
     requiresArtwork: false,
     proofRecommended: false,
-    inventoryTags: ["photo-frame"],
+    enabled: false,
+    inventoryTags: ["quick-sale-stock"],
+    options: {}
+  },
+  {
+    id: "canvas-framed",
+    category: "canvas_photo",
+    department: "canvas_photo",
+    name: "Framed Canvas Print",
+    description: "Legacy item (not currently offered).",
+    basePrice: 450,
+    unitLabel: "canvas",
+    requiresArtwork: true,
+    proofRecommended: true,
+    enabled: false,
+    inventoryTags: ["canvas-roll", "frame"],
     options: {
       size: [
-        { id: "a5", label: "A5", priceDelta: 0 },
-        { id: "a4", label: "A4", priceDelta: 45 }
+        { id: "a4", label: "A4", priceDelta: 0 },
+        { id: "a2", label: "A2", priceDelta: 350 }
+      ]
+    }
+  },
+  {
+    id: "document-business-cards",
+    category: "document",
+    department: "document_printing",
+    name: "Business Cards",
+    description: "Legacy item (not currently offered).",
+    basePrice: 2.5,
+    unitLabel: "card",
+    requiresArtwork: true,
+    proofRecommended: true,
+    enabled: false,
+    inventoryTags: ["paper-stock"],
+    options: {
+      sides: [
+        { id: "single", label: "Single Sided", priceDelta: 0 },
+        { id: "double", label: "Double Sided", priceDelta: 1.2 }
       ]
     }
   }

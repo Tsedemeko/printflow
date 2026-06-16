@@ -8,11 +8,9 @@ import { useEffect, useMemo, useState } from "react";
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 const categories: { id: ProductCategory; label: string; description: string }[] = [
-  { id: "apparel", label: "Apparel Printing", description: "T-shirts, hoodies, polos, caps, and bags." },
-  { id: "document", label: "Document Printing", description: "Flyers, cards, booklets, brochures, posters, and menus." },
-  { id: "signage", label: "Signage & Banners", description: "Pull-up banners, vinyl, boards, wall graphics, and boards." },
-  { id: "canvas_photo", label: "Canvas & Photo", description: "Canvas, framed canvas, acrylic, photo books, and photo prints." },
-  { id: "promotional", label: "Promotional Items", description: "Mugs, bottles, keyholders, pens, and branded gifts." }
+  { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
+  { id: "signage", label: "Banners & Signage", description: "X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls." },
+  { id: "promotional", label: "Branding & Promo", description: "Umbrellas, table cloths, oval boards, and branded gifts." }
 ];
 
 type Step = "categories" | "products" | "customize" | "customer" | "ticket" | "collect";

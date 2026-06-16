@@ -29,7 +29,7 @@ import type {
 import type { DiscountRule } from "@printflow/shared";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { config } from "./config.js";
 import { loadSupabaseState, persistSupabaseState, remotePersistenceEnabled } from "./services/persistence.js";
 import { hashPassword } from "./services/app-auth.js";
@@ -91,7 +91,9 @@ export interface StockActor {
 }
 
 const now = () => new Date().toISOString();
-const dataFile = join(process.cwd(), config.dataDir, "printflow.local.json");
+// Honor an absolute PRINTFLOW_DATA_DIR (e.g. a Render disk mount at /var/data); otherwise resolve from cwd.
+const dataDir = isAbsolute(config.dataDir) ? config.dataDir : join(process.cwd(), config.dataDir);
+const dataFile = join(dataDir, "printflow.local.json");
 let remoteHydrated = false;
 
 const initialState: AppState = {

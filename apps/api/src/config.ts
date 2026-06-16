@@ -1,6 +1,6 @@
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
-  port: Number(process.env.API_PORT ?? 4000),
+  port: Number(process.env.PORT ?? process.env.API_PORT ?? 4000),
   publicWebUrl: process.env.PUBLIC_WEB_URL ?? "http://localhost:3000",
   apiBaseUrl: process.env.API_BASE_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`,
   appAuthSecret: process.env.APP_AUTH_SECRET ?? "",
@@ -30,16 +30,22 @@ export const config = {
 
 export function assertProductionConfig() {
   if (config.nodeEnv !== "production") return;
-  const missing = [
-    ["APP_AUTH_SECRET", config.appAuthSecret],
+  // Only the auth secret is strictly required to boot securely.
+  if (!config.appAuthSecret) {
+    throw new Error("APP_AUTH_SECRET is required in production.");
+  }
+  // The rest are optional: their features stay disabled until configured.
+  const optional = [
     ["SUPABASE_URL", config.supabaseUrl],
     ["SUPABASE_SERVICE_ROLE_KEY", config.supabaseServiceRoleKey],
     ["PAYFAST_MERCHANT_ID", config.payfastMerchantId],
     ["PAYFAST_MERCHANT_KEY", config.payfastMerchantKey],
-    ["PAYFAST_NOTIFY_URL", config.payfastNotifyUrl],
     ["YOCO_SECRET_KEY", config.yocoSecretKey]
-  ].filter(([, value]) => !value);
-  if (missing.length > 0) {
-    throw new Error(`Missing production configuration: ${missing.map(([key]) => key).join(", ")}`);
+  ].filter(([, value]) => !value).map(([key]) => key);
+  if (optional.length > 0) {
+    const note = (!config.supabaseUrl || !config.supabaseServiceRoleKey)
+      ? " Supabase is not set, so data is stored on local disk only."
+      : "";
+    console.warn(`[config] Not configured: ${optional.join(", ")}. Related features are disabled until set.${note}`);
   }
 }

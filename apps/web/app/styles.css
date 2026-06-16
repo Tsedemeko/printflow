@@ -1324,3 +1324,159 @@ textarea {
 .site-section { border-radius: 20px; padding: 28px; }
 .site-section:nth-of-type(even) { background: linear-gradient(180deg, rgba(255,255,255,0.65), rgba(238,242,248,0.4)); }
 .site-section:nth-of-type(odd) { background: linear-gradient(180deg, rgba(250,245,234,0.7), rgba(245,241,230,0.35)); }
+
+/* =====================================================================
+   Responsive layer — phones, tablets, laptops, desktops (overrides above)
+   ===================================================================== */
+img, svg, video, canvas { max-width: 100%; height: auto; }
+.invoice-table { width: 100%; }
+
+/* Laptops / small desktops */
+@media (max-width: 1100px) {
+  h1 { font-size: 46px; }
+  .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Tablets */
+@media (max-width: 900px) {
+  .hero, .site-hero { grid-template-columns: 1fr; }
+  .site-hero { padding: 24px; }
+  .metrics, .compact-cards, .stage-strip, .kpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .team-grid, .job-grid { grid-template-columns: 1fr; }
+  .studio-row { grid-template-columns: 1fr 1fr; }
+  .page { padding: 22px; }
+}
+
+/* Large phones / tablet portrait */
+@media (max-width: 760px) {
+  h1 { font-size: 38px; }
+  h2 { font-size: 24px; }
+  /* Marketing header: let it wrap and shrink the big logo */
+  .site-topbar { height: auto; flex-wrap: wrap; gap: 6px; padding: 12px 16px; }
+  .site-topbar .brand-img, .brand-img { height: 52px; }
+  .site-topbar .nav { width: 100%; justify-content: flex-start; }
+  .site-topbar .nav a { font-size: 15px; padding: 8px 10px; }
+  .public-topbar { height: auto; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+  /* Stack the invoice/quotation letterhead */
+  .invoice-head { flex-direction: column; gap: 12px; }
+  .invoice-meta { text-align: left; }
+  .invoice-meta div { justify-content: flex-start; }
+  .invoice-sheet { padding: 20px; }
+  .invoice-totals { max-width: none; }
+  .contact-band { flex-direction: column; align-items: flex-start; }
+}
+
+/* Phones */
+@media (max-width: 560px) {
+  h1 { font-size: 31px; }
+  .page { padding: 16px; }
+  .metrics, .compact-cards, .service-grid, .steps-grid, .stage-strip,
+  .form-grid, .studio-row, .kpiRow { grid-template-columns: 1fr; }
+  .row { gap: 8px; }
+  .row > .button, .row > button, .row > a.button { flex: 1 1 auto; justify-content: center; }
+  .ov-row { flex-wrap: wrap; }
+  .site-section { padding: 18px; }
+  .brand-badge-img { height: 84px; width: 84px; }
+  .work-tabs { flex-wrap: wrap; }
+  .invoice-table th, .invoice-table td { padding: 8px 6px; font-size: 13px; }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+  h1 { font-size: 27px; }
+  .site-topbar .brand-img, .brand-img { height: 44px; }
+  .metric strong { font-size: 22px; }
+}
+
+/* ===== Staff/admin portal responsiveness ===== */
+@media (max-width: 900px) {
+  .portal { grid-template-columns: 1fr; }
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    position: static;
+  }
+  .portal-brand { margin: 0 auto 0 0; }
+  .sidebar .brand-logo { max-width: 150px; }
+  /* nav becomes a single horizontally-scrollable row of pills */
+  .side-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .side-nav a { min-height: 38px; padding: 7px 12px; white-space: nowrap; }
+  .side-footer {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    width: 100%;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .portal-main { padding: 18px; }
+}
+
+@media (max-width: 560px) {
+  .portal-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .user-chip { width: 100%; justify-content: flex-start; }
+  .section-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  /* Kanban stays swipeable rather than crushing columns */
+  .board { grid-auto-columns: 78%; grid-template-columns: none; grid-auto-flow: column; }
+  .board-column { min-width: 0; }
+  .portal-main { padding: 14px; }
+}
+
+/* ===== Online order, login, kiosk, invoice/quote — phone polish ===== */
+@media (max-width: 1100px) {
+  .kiosk-services { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  /* Kiosk */
+  .kiosk-page { padding: 18px; }
+  .kiosk-hero { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .kiosk-hero h1 { font-size: 32px; }
+  /* Invoice / quotation: stack toolbar + let a wide table scroll instead of overflow */
+  .invoice-page { padding: 14px; }
+  .invoice-sheet { overflow-x: auto; }
+  .invoice-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .invoice-toolbar-actions { width: 100%; }
+  .invoice-toolbar .button,
+  .invoice-toolbar button,
+  .share-wrap,
+  .share-wrap button { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 560px) {
+  /* Login */
+  .login-shell { padding: 16px; }
+  .login-panel { padding: 20px; }
+  /* Kiosk */
+  .kiosk-services { grid-template-columns: 1fr; }
+  .kiosk-service { min-height: auto; padding: 16px; }
+  .kiosk-hero h1 { font-size: 28px; }
+  /* Online order wizard: full-width fields, tighter padding */
+  .order-page { padding: 14px; }
+  .order-line > label,
+  .order-line input,
+  .order-line select { width: 100%; }
+  /* Invoice / quotation totals span full width */
+  .invoice-totals { max-width: none; }
+  .invoice-meta h1 { font-size: 24px; }
+}
+
+/* Cleaner printed invoice/quotation on any paper size */
+@media print {
+  .invoice-page { padding: 0; }
+  .invoice-sheet { overflow: visible; }
+  .invoice-totals { max-width: 320px; }
+}

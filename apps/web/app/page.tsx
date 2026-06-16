@@ -3,19 +3,24 @@ import { getCatalogProducts } from "../lib/api-data";
 const services = [
   { name: "Embroidery", blurb: "Logos, names, and badges stitched onto garments, caps, and workwear." },
   { name: "Heat Press", blurb: "Vibrant heat-transfer prints for t-shirts, jerseys, and promo wear." },
+  { name: "Sublimation", blurb: "Full-colour sublimation printing on shirts, sportswear, and fabric — from R70/metre." },
+  { name: "Apparel & Sportswear", blurb: "T-shirts, golf shirts, hoodies, tracksuits, soccer & basketball kits, and sports dresses." },
+  { name: "School Uniforms", blurb: "Sublimated school shirts, golf shirts, tracksuits, and dresses." },
   { name: "Overalls & Workwear", blurb: "Branded overalls and uniforms for teams, sites, and businesses." },
   { name: "Jumpsuits", blurb: "Custom-fitted jumpsuits made and finished to your spec." },
   { name: "Wedding Dresses", blurb: "Bespoke bridal dresses designed, tailored, and fitted with care." },
   { name: "Traditional Dress", blurb: "Authentic traditional and cultural attire for every occasion." },
-  { name: "Jackets", blurb: "Tailored and branded jackets, from corporate to casual." },
+  { name: "Jackets & Matric Jackets", blurb: "Tailored and branded jackets and matric jackets with names and badges." },
   { name: "Trousers", blurb: "Made-to-measure and altered trousers with a clean finish." },
-  { name: "T-Shirts", blurb: "Custom printed and embroidered t-shirts, single or bulk." }
+  { name: "Banners & Signage", blurb: "X-banners, teardrop & telescopic flags, pull-up banners, corex boards, and flags." },
+  { name: "Pop-Up Walls & Gazebos", blurb: "3x3 branded media walls and gazebos — perfect for events and activations." },
+  { name: "Branding & Promo", blurb: "Branded umbrellas, table cloths, oval boards, bucket hats, and accessories." }
 ];
 
 const steps = [
-  { n: "1", title: "Tell us what you need", text: "Start an order online or visit the shop. Choose your garment and quantity." },
+  { n: "1", title: "Tell us what you need", text: "Start an order online or visit the shop. Choose your product and quantity." },
   { n: "2", title: "Share your design", text: "Upload artwork or your logo — we proof it and confirm before production." },
-  { n: "3", title: "We make it", text: "Embroidery, heat press, or tailoring — tracked through every stage." },
+  { n: "3", title: "We make it", text: "Sublimation, heat press, and branding — tracked through every stage." },
   { n: "4", title: "Collect or get notified", text: "We message you the moment your order is ready for collection." }
 ];
 

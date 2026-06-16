@@ -12,7 +12,9 @@
       "WebFetch(domain:yoco.docs.buildwithfern.com)",
       "Bash(curl -s __TRACKED_VAR__/_next/static/css/app/layout.css)",
       "Bash(curl -s \"http://localhost:3000/_next/static/css/app/layout.css\")",
-      "Bash(curl -s -o /dev/null -w \"/ -> %{http_code}\\\\n\" \"http://localhost:3000/\")"
+      "Bash(curl -s -o /dev/null -w \"/ -> %{http_code}\\\\n\" \"http://localhost:3000/\")",
+      "Bash(npx tsc *)",
+      "Read(//c/Users/sethm/ngrok/packages/shared/dist/src/**)"
     ]
   }
 }

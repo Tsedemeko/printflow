@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"//\")",
+      "Bash(timeout 5 npm view qrcode version)",
+      "Bash(npm install *)",
+      "Bash(grep -rnoE 'fetch\\\\\\(`\\\\$\\\\{apiUrl\\\\}[^`]+`|method: \"\\(GET|POST|PATCH|PUT|DELETE\\)\"' apps/store/App.tsx)",
+      "Bash(grep -rnoE 'fetch\\\\\\(`\\\\$\\\\{apiUrl\\\\}[^`]+`|method: \"\\(GET|POST|PATCH|PUT|DELETE\\)\"' apps/kiosk/App.tsx)",
+      "Bash(grep -rnoE 'fetch\\\\\\(`\\\\$\\\\{apiUrl\\\\}[^`]+`|method: \"\\(GET|POST|PATCH|PUT|DELETE\\)\"' apps/manager/App.tsx)",
+      "WebFetch(domain:apitracker.io)",
+      "WebFetch(domain:developer.yoco.com)",
+      "WebFetch(domain:yoco.docs.buildwithfern.com)",
+      "Bash(curl -s __TRACKED_VAR__/_next/static/css/app/layout.css)",
+      "Bash(curl -s \"http://localhost:3000/_next/static/css/app/layout.css\")",
+      "Bash(curl -s -o /dev/null -w \"/ -> %{http_code}\\\\n\" \"http://localhost:3000/\")"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+import { PortalShell } from "../../components/PortalShell";
+import { CatalogManager } from "../../components/CatalogManager";
+import { CounterQueuePanel } from "../../components/CounterQueuePanel";
+import { DepositRulesManager } from "../../components/DepositRulesManager";
+import { DiscountRulesManager } from "../../components/DiscountRulesManager";
+import { getAdminData } from "../../lib/api-data";
+
+export default async function AdminPage() {
+  const data = await getAdminData();
+
+  return (
+    <PortalShell eyebrow="Business command center" title="Dashboard">
+      <section className="metrics">
+        <div className="metric glossy">Sales today<strong>R{data.metrics.totalSales.toLocaleString()}</strong></div>
+        <div className="metric glossy">Active jobs<strong>{data.metrics.activeOrders}</strong></div>
+        <div className="metric glossy">Average order<strong>R{data.metrics.averageOrderValue.toFixed(2)}</strong></div>
+        <div className="metric glossy">Outstanding<strong>R{data.metrics.outstandingBalances.toFixed(2)}</strong></div>
+      </section>
+      <section className="admin-grid">
+        <CounterQueuePanel />
+        <DiscountRulesManager initialRules={data.discountRules} />
+        <DepositRulesManager initialRules={data.depositRules} />
+        <CatalogManager initialProducts={data.products} />
+        <article className="card glossy section-gold">
+          <h2>Staff alerts</h2>
+          <p>New kiosk customer waiting, artwork uploaded, design proofs pending, low-stock warnings.</p>
+        </article>
+        <article className="card glossy section-green">
+          <h2>Owner controls</h2>
+          <p>Use Orders, Staff & Roles, Inventory, Service Mix, pricing, and production views for day-to-day operations.</p>
+        </article>
+      </section>
+    </PortalShell>
+  );
+}

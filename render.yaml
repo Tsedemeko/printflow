@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: printflow-api
+    env: node
+    plan: starter
+    rootDir: apps/api
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: 10000

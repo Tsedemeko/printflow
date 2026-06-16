@@ -1,0 +1,518 @@
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
+import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
+import { storeData } from "./src/demo";
+
+type Tab = "mywork" | "counter" | "jobs" | "pos" | "shop";
+type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3000";
+let staffAccessToken = "";
+
+async function shareInvoice(order: Order) {
+  await Share.share({
+    title: `Invoice ${order.orderNumber}`,
+    message: `Invoice ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/invoice/${order.id}`
+  });
+}
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>("counter");
+  const [staff, setStaff] = useState<Staff | null>(null);
+  const [orders, setOrders] = useState<Order[]>(storeData.orders);
+  const [counterQueue, setCounterQueue] = useState<CounterQueueTicket[]>([]);
+  const tabs = staff ? tabsForRoles(staff.roles) : [];
+
+  async function refreshOrders() {
+    const response = await fetch(`${apiUrl}/orders`);
+    if (response.ok) {
+      const payload = await response.json();
+      setOrders(payload.orders);
+    }
+  }
+
+  async function refreshCounterQueue() {
+    const response = await fetch(`${apiUrl}/counter/queue`);
+    if (response.ok) {
+      const payload = await response.json();
+      setCounterQueue(payload.tickets);
+    }
+  }
+
+  useEffect(() => {
+    if (staff) {
+      void refreshOrders();
+      void refreshCounterQueue();
+    }
+  }, [staff]);
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Text style={styles.logo}>Finesse Staff</Text>
+        <Text style={styles.subtle}>Embroidery · Heat Press · Garment Design</Text>
+      </View>
+      {staff ? (
+        <View style={styles.tabs}>
+          {tabs.map((item) => (
+            <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
+              <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item.toUpperCase()}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <ScrollView contentContainerStyle={styles.page}>
+        {!staff ? <MobileLogin onLogin={(nextStaff) => {
+          staffAccessToken = nextStaff.token ?? "";
+          setStaff(nextStaff);
+          setTab(tabsForRoles(nextStaff.roles)[0] ?? "counter");
+        }} /> : null}
+        {staff ? <WaitingBanner tickets={counterQueue} staffName={staff.name} onRefresh={refreshCounterQueue} /> : null}
+        {tab === "mywork" && staff ? <MyWork orders={orders} staff={staff} onRefresh={refreshOrders} /> : null}
+        {tab === "counter" && staff ? <Counter orders={orders} tickets={counterQueue} staffName={staff.name} onRefresh={async () => { await refreshOrders(); await refreshCounterQueue(); }} /> : null}
+        {tab === "jobs" && staff ? <Jobs orders={orders} onRefresh={refreshOrders} /> : null}
+        {tab === "pos" && staff ? <POS orders={orders} onRefresh={refreshOrders} /> : null}
+        {tab === "shop" && staff && canUseStoreAdmin(staff.roles) ? <Shop staff={staff} /> : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const presets: { label: string; name: string; roles: StaffRole[] }[] = [
+    { label: "Designer", name: "Lead Designer", roles: ["designer"] },
+    { label: "Embroidery & Press", name: "Embroidery & Press Operator", roles: ["apparel_operator"] },
+    { label: "Cashier", name: "Counter Cashier", roles: ["cashier"] },
+    { label: "Manager", name: "Shop Manager", roles: ["manager"] }
+  ];
+
+  async function signIn() {
+    setMessage("");
+    const authResponse = await fetch(`${apiUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    if (!authResponse.ok) {
+      setMessage("Invalid staff email or password.");
+      return;
+    }
+    const authPayload = await authResponse.json() as { token: string };
+    const sessionResponse = await fetch(`${apiUrl}/auth/session`, {
+      headers: { Authorization: `Bearer ${authPayload.token}` }
+    });
+    if (!sessionResponse.ok) {
+      setMessage("This account does not have an active Finesse staff profile.");
+      return;
+    }
+    const sessionPayload = await sessionResponse.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
+    onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Staff access required</Text>
+      <Text style={styles.title}>Sign in</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Staff login</Text>
+        <Text style={styles.muted}>This app is for designers/operators, counter finalization, jobs, and POS. The kiosk and owner apps are separate.</Text>
+        <Text style={styles.muted}>Staff accounts are stored in the Finesse business database.</Text>
+        <View>
+          <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Staff email" autoCapitalize="none" keyboardType="email-address" />
+          <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+          {message ? <Text style={styles.warning}>{message}</Text> : null}
+          <Pressable style={styles.button} onPress={() => void signIn()}><Text style={styles.buttonText}>Sign in</Text></Pressable>
+        </View>
+        <Text style={styles.muted}>Local development shortcuts</Text>
+        <View style={styles.grid}>
+          {presets.map((preset) => (
+            <Pressable style={styles.tile} key={preset.label} onPress={() => onLogin({ name: preset.name, roles: preset.roles })}>
+              <Text style={styles.tileTitle}>{preset.label}</Text>
+              <Text style={styles.muted}>{preset.roles.map((role) => role.replace("_", " ")).join(", ")}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function WaitingBanner({ tickets, staffName, onRefresh }: { tickets: CounterQueueTicket[]; staffName: string; onRefresh: () => Promise<void> }) {
+  const waiting = tickets.filter((ticket) => ticket.status === "waiting" || ticket.status === "escalated");
+  if (waiting.length === 0) return null;
+
+  async function acknowledge(ticket: CounterQueueTicket) {
+    await fetch(`${apiUrl}/counter/queue/${ticket.orderId}/acknowledge`, {
+      method: "POST",
+      headers: staffHeaders(["cashier"]),
+      body: JSON.stringify({ staffName })
+    });
+    await onRefresh();
+  }
+
+  return (
+    <View style={styles.alertPanel}>
+      <Text style={styles.alertTitle}>{waiting.length} kiosk customer{waiting.length === 1 ? "" : "s"} waiting</Text>
+      {waiting.slice(0, 3).map((ticket) => (
+        <View style={styles.alertRow} key={ticket.id}>
+          <Text style={styles.alertText}>{ticket.orderNumber} - {ticket.customerName} - {ticket.status}</Text>
+          <Pressable style={styles.alertButton} onPress={() => void acknowledge(ticket)}><Text style={styles.alertButtonText}>Acknowledge</Text></Pressable>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Counter({ orders, tickets, staffName, onRefresh }: { orders: Order[]; tickets: CounterQueueTicket[]; staffName: string; onRefresh: () => Promise<void> }) {
+  const quote = useMemo(() => priceQuote([{ productId: "canvas-framed", quantity: 1, selectedOptions: { size: "a2", depth: "38mm", edge: "image", frame: "floating" } }]), []);
+  const deposit = calculateRequiredDeposit(quote.total, quote.items);
+  const order = orders[0];
+
+  async function approve() {
+    if (!order) return;
+    await fetch(`${apiUrl}/orders/${order.id}/status`, {
+      method: "POST",
+      headers: staffHeaders(["designer"]),
+      body: JSON.stringify({ status: "approved" })
+    });
+    await onRefresh();
+  }
+
+  async function sendUploadLink() {
+    if (!order) return;
+    await fetch(`${apiUrl}/proofs/${order.id}/send`, { method: "POST", headers: staffHeaders(["designer"]) });
+    await onRefresh();
+  }
+
+  async function acknowledge(ticket: CounterQueueTicket) {
+    await fetch(`${apiUrl}/counter/queue/${ticket.orderId}/acknowledge`, {
+      method: "POST",
+      headers: staffHeaders(["cashier"]),
+      body: JSON.stringify({ staffName })
+    });
+    await onRefresh();
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Assisted order finalization</Text>
+      <Text style={styles.title}>Counter workflow</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Waiting customers</Text>
+        {tickets.length === 0 ? <Text style={styles.muted}>No kiosk customers waiting.</Text> : null}
+        {tickets.map((ticket) => (
+          <View style={styles.job} key={ticket.id}>
+            <Text style={styles.tileTitle}>{ticket.position}. {ticket.orderNumber} - {ticket.customerName}</Text>
+            <Text style={styles.muted}>{ticket.department.replace("_", " ")} | {ticket.status}</Text>
+            <Pressable style={styles.secondaryButton} onPress={() => void acknowledge(ticket)}><Text style={styles.secondaryButtonText}>Acknowledge</Text></Pressable>
+          </View>
+        ))}
+      </View>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Pre-order {order?.orderNumber ?? "#1042"}</Text>
+        <Text style={styles.muted}>Kiosk selections loaded. Consultant confirms customer, artwork, pricing, deposit, and approval.</Text>
+        <View style={styles.mockup}>
+          <View style={styles.canvasPreview} />
+          <View style={styles.previewRail}>
+            <Text style={styles.tileTitle}>Live mockup</Text>
+            <Text style={styles.muted}>Preflight warning appears if resolution is too low for selected print size.</Text>
+          </View>
+        </View>
+        <Text style={styles.total}>Total R{quote.total.toFixed(2)} | Deposit R{deposit.amount.toFixed(2)}</Text>
+        <View style={styles.row}>
+          <Pressable style={styles.button} onPress={() => void approve()}><Text style={styles.buttonText}>Customer Approved</Text></Pressable>
+          <Pressable style={styles.secondaryButton} onPress={() => void sendUploadLink()}><Text style={styles.secondaryButtonText}>Send upload link</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function MyWork({ orders, staff, onRefresh }: { orders: Order[]; staff: Staff; onRefresh: () => Promise<void> }) {
+  const done = ["completed", "cancelled"];
+  const claimable = ["new", "awaiting_artwork", "design_review", "approved"];
+  const myId = staff.id;
+  const mine = orders.filter((order) => myId && order.staffAssigneeId === myId && !done.includes(order.status));
+  const unclaimed = orders.filter((order) => !order.staffAssigneeId && claimable.includes(order.status));
+  const statuses = storeData.workflowColumns.map((column) => column.status);
+
+  async function claim(order: Order) {
+    if (!myId) return;
+    await fetch(`${apiUrl}/orders/${order.id}`, {
+      method: "PATCH",
+      headers: staffHeaders(["designer"]),
+      body: JSON.stringify({ staffAssigneeId: myId })
+    });
+    await onRefresh();
+  }
+
+  async function advance(order: Order) {
+    const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+    if (!nextStatus) return;
+    await fetch(`${apiUrl}/orders/${order.id}/status`, {
+      method: "POST",
+      headers: staffHeaders(["designer"]),
+      body: JSON.stringify({ status: nextStatus })
+    });
+    await onRefresh();
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Designers & operators</Text>
+      <Text style={styles.title}>My work</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>My active jobs ({mine.length})</Text>
+        {!myId ? <Text style={styles.muted}>Sign in with a staff email (not a quick preset) to see jobs assigned to you.</Text> : null}
+        {myId && mine.length === 0 ? <Text style={styles.muted}>No active jobs assigned to you.</Text> : null}
+        {mine.map((order) => {
+          const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+          return (
+            <View style={styles.job} key={order.id}>
+              <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+              <Text style={styles.muted}>{order.queueName.replace("_", " ")} | {statusLabel(order.status)}</Text>
+              {order.activityLog[0] ? <Text style={styles.muted}>{order.activityLog[0].message}</Text> : null}
+              <View style={styles.row}>
+                {nextStatus ? (
+                  <Pressable style={styles.secondaryButton} onPress={() => void advance(order)}>
+                    <Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
+                  <Text style={styles.secondaryButtonText}>Share invoice</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Unclaimed jobs ({unclaimed.length})</Text>
+        {unclaimed.length === 0 ? <Text style={styles.muted}>No unclaimed jobs right now.</Text> : null}
+        {unclaimed.map((order) => (
+          <View style={styles.job} key={order.id}>
+            <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+            <Text style={styles.muted}>{order.queueName.replace("_", " ")} | {statusLabel(order.status)}</Text>
+            <Pressable style={[styles.button, !myId && styles.buttonDisabled]} disabled={!myId} onPress={() => void claim(order)}>
+              <Text style={styles.buttonText}>Claim job</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<void> }) {
+  async function move(order: Order) {
+    const statuses = storeData.workflowColumns.map((column) => column.status);
+    const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+    if (!nextStatus) return;
+    await fetch(`${apiUrl}/orders/${order.id}/status`, {
+      method: "POST",
+      headers: staffHeaders(["designer"]),
+      body: JSON.stringify({ status: nextStatus })
+    });
+    await onRefresh();
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Production workspace</Text>
+      <Text style={styles.title}>Department queues</Text>
+      {storeData.workflowColumns.slice(0, 8).map((column) => {
+        const columnOrders = orders.filter((order) => order.status === column.status);
+        return (
+          <View style={styles.panel} key={column.status}>
+            <Text style={styles.panelTitle}>{column.label}</Text>
+            {columnOrders.length === 0 ? <Text style={styles.muted}>No jobs in this stage.</Text> : null}
+            {columnOrders.map((order) => (
+              <View style={styles.job} key={order.id}>
+                <Text style={styles.tileTitle}>{order.orderNumber}</Text>
+                <Text style={styles.muted}>{order.queueName.replace("_", " ")} | Balance R{order.balanceDue.toFixed(2)}</Text>
+                <Pressable style={styles.secondaryButton} onPress={() => void move(order)}><Text style={styles.secondaryButtonText}>Move next</Text></Pressable>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<void> }) {
+  const order = orders.find((item) => item.status === "ready_for_collection") ?? orders[0];
+  const [inventory, setInventory] = useState<{ id: string; sku: string; name: string; quantityOnHand: number }[]>([]);
+  const [search, setSearch] = useState("");
+  const [selectedItem, setSelectedItem] = useState<{ id: string; sku: string; name: string; quantityOnHand: number } | null>(null);
+  const [message, setMessage] = useState("");
+  const filteredInventory = inventory.filter((item) => `${item.sku} ${item.name}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
+
+  useEffect(() => {
+    void refreshInventory();
+  }, []);
+
+  async function refreshInventory() {
+    const response = await fetch(`${apiUrl}/inventory`);
+    if (response.ok) {
+      const payload = await response.json() as { items: { id: string; sku: string; name: string; quantityOnHand: number }[] };
+      setInventory(payload.items);
+    }
+  }
+
+  async function pay(method: PaymentMethod) {
+    if (!order) return;
+    await fetch(`${apiUrl}/payments/${order.id}`, {
+      method: "POST",
+      headers: staffHeaders(["cashier"]),
+      body: JSON.stringify({ method, amount: order.balanceDue || order.requiredDeposit || order.total })
+    });
+    await fetch(`${apiUrl}/payments/${order.id}/receipt`, {
+      method: "POST",
+      headers: staffHeaders(["cashier"]),
+      body: JSON.stringify({ channel: "sms" })
+    });
+    setMessage(`Payment recorded for ${order.orderNumber}. Receipt queued by SMS.`);
+    await onRefresh();
+  }
+
+  async function quickSale() {
+    const itemName = selectedItem?.name ?? search.trim();
+    if (!itemName) {
+      setMessage("Search or select an inventory item first.");
+      return;
+    }
+    const response = await fetch(`${apiUrl}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "quick_sale",
+        customer: { name: "Walk-in customer", mobile: "+27000000000" },
+        items: [{ productId: "quick-photo-frame", quantity: 1, selectedOptions: { size: "a4" }, specialInstructions: itemName }]
+      })
+    });
+    if (response.ok) {
+      const payload = await response.json() as { order: Order };
+      setMessage(`${payload.order.orderNumber} quick sale created for ${itemName}.`);
+      await onRefresh();
+    }
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Point of sale</Text>
+      <Text style={styles.title}>Payments and quick sale</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Settle order {order?.orderNumber ?? ""}</Text>
+        <Text style={styles.big}>R{(order?.balanceDue ?? 0).toFixed(2)}</Text>
+        <Text style={styles.muted}>Yoco-ready card payment, cash, EFT, SnapScan, Zapper, or manual external payment.</Text>
+        <View style={styles.row}>
+          {[
+            ["card_yoco", "Yoco"],
+            ["cash", "Cash"],
+            ["eft", "EFT"],
+            ["snapscan", "SnapScan"]
+          ].map(([method, label]) => (
+            <Pressable style={styles.secondaryButton} key={method} onPress={() => void pay(method as PaymentMethod)}><Text style={styles.secondaryButtonText}>{label}</Text></Pressable>
+          ))}
+        </View>
+        {message ? <Text style={styles.warning}>{message}</Text> : null}
+        {order ? (
+          <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
+            <Text style={styles.secondaryButtonText}>Share invoice</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Quick sale</Text>
+        <TextInput style={styles.input} value={search} onChangeText={(value) => { setSearch(value); setSelectedItem(null); }} placeholder="Search ready-made frame, stationery, stock item" />
+        {filteredInventory.map((item) => (
+          <Pressable style={styles.secondaryButton} key={item.id} onPress={() => { setSelectedItem(item); setSearch(item.name); }}>
+            <Text style={styles.secondaryButtonText}>{item.sku} - {item.name} - {item.quantityOnHand} left</Text>
+          </Pressable>
+        ))}
+        <Pressable style={styles.button} onPress={() => void quickSale()}><Text style={styles.buttonText}>Create quick sale</Text></Pressable>
+      </View>
+    </View>
+  );
+}
+
+function Shop({ staff }: { staff: { name: string; roles: StaffRole[] } }) {
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Store admin</Text>
+      <Text style={styles.title}>Owner and manager controls</Text>
+      <Text style={styles.muted}>{staff.name} can access these controls through {staff.roles.map((role) => role.replace("_", " ")).join(", ")} access.</Text>
+      <View style={styles.grid}>
+        {["Staff roles and access", "Service catalog", "Deposit and discount rules", "Inventory admin", "Daily reports", "Order adjustments"].map((item) => (
+          <View style={styles.tile} key={item}>
+            <Text style={styles.tileTitle}>{item}</Text>
+            <Text style={styles.muted}>Synced with the Finesse API and available in the web admin portal.</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function canUseStoreAdmin(roles: StaffRole[]): boolean {
+  return roles.includes("owner") || roles.includes("manager");
+}
+
+function tabsForRoles(roles: StaffRole[]): Tab[] {
+  if (canUseStoreAdmin(roles)) return ["mywork", "counter", "jobs", "pos", "shop"];
+  if (roles.includes("cashier")) return ["pos", "counter"];
+  if (roles.some((role) => role.includes("operator") || role === "designer")) return ["mywork", "jobs", "counter"];
+  return ["mywork", "counter", "pos"];
+}
+
+function staffHeaders(roles: StaffRole[]): Record<string, string> {
+  return staffAccessToken
+    ? { "Content-Type": "application/json", Authorization: `Bearer ${staffAccessToken}` }
+    : { "Content-Type": "application/json", "x-staff-roles": roles.join(",") };
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#eef2f8" },
+  header: { backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, padding: 18 },
+  logo: { color: "#0f1f3d", fontSize: 24, fontWeight: "800" },
+  subtle: { color: "#5b6b86", marginTop: 4 },
+  tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 12, backgroundColor: "#ffffff" },
+  tab: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9 },
+  activeTab: { backgroundColor: "#c19a3e", borderColor: "#c19a3e" },
+  tabText: { color: "#5b6b86", fontSize: 12, fontWeight: "700" },
+  activeTabText: { color: "#0f1f3d" },
+  page: { gap: 16, padding: 18 },
+  eyebrow: { color: "#9a7b22", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  title: { color: "#0f1f3d", fontSize: 34, fontWeight: "800", marginBottom: 14, marginTop: 4 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tile: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderLeftColor: "#c19a3e", borderLeftWidth: 5, borderRadius: 8, borderWidth: 1, minWidth: 180, padding: 14 },
+  tileTitle: { color: "#0f1f3d", fontSize: 16, fontWeight: "800" },
+  muted: { color: "#5b6b86", lineHeight: 20, marginTop: 4 },
+  panel: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 14, padding: 16 },
+  panelTitle: { color: "#0f1f3d", fontSize: 18, fontWeight: "800" },
+  big: { color: "#0f1f3d", fontSize: 42, fontWeight: "900", marginVertical: 8 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
+  button: { backgroundColor: "#0f1f3d", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: "#ffffff", fontWeight: "800" },
+  secondaryButton: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
+  secondaryButtonText: { color: "#0f1f3d", fontWeight: "800" },
+  mockup: { alignItems: "center", flexDirection: "row", gap: 14, marginTop: 14 },
+  canvasPreview: { backgroundColor: "#f4d35e", borderColor: "#0f1f3d", borderWidth: 8, height: 130, width: 100 },
+  previewRail: { flex: 1 },
+  total: { color: "#0f1f3d", fontSize: 18, fontWeight: "800", marginTop: 12 },
+  job: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 12 },
+  input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 44, paddingHorizontal: 10 },
+  warning: { color: "#b91c1c", fontWeight: "800", marginTop: 10 },
+  alertPanel: { backgroundColor: "#fff7e8", borderColor: "#d79b28", borderRadius: 8, borderWidth: 1, padding: 14 },
+  alertTitle: { color: "#7a4c00", fontSize: 18, fontWeight: "900" },
+  alertRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 8 },
+  alertText: { color: "#0f1f3d", fontWeight: "800" },
+  alertButton: { backgroundColor: "#d79b28", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  alertButtonText: { color: "#ffffff", fontWeight: "900" }
+});

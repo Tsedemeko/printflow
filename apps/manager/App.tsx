@@ -1,0 +1,389 @@
+import { useEffect, useState } from "react";
+import { Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { statusLabel } from "@printflow/shared";
+import type { Order, StaffRole } from "@printflow/shared";
+
+type Tab = "overview" | "team" | "stock";
+type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
+type RosterMember = { id: string; name: string; role: string; roles: string[] };
+type InventoryItem = { id: string; sku: string; name: string; quantityOnHand: number; reorderPoint: number };
+type StockMovement = { id: string; itemId: string; itemName: string; type: string; delta: number; quantityAfter: number; note?: string; actorName: string; createdAt: string };
+
+const MOVEMENT_LABEL: Record<string, string> = {
+  opening: "Opening", receive: "Stock in", issue: "Stock out", consume: "Used on order", recount: "Recount"
+};
+type Metrics = { totalSales: number; activeOrders: number; averageOrderValue: number; outstandingBalances: number };
+type BoardColumn = { status: string; label: string; orders: Order[] };
+
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3000";
+const ACTIVE = ["new", "awaiting_artwork", "design_review", "approved", "in_production", "quality_check"];
+let accessToken = "";
+
+async function shareInvoice(order: Order) {
+  await Share.share({
+    title: `Invoice ${order.orderNumber}`,
+    message: `Invoice ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/invoice/${order.id}`
+  });
+}
+
+function headers(roles: StaffRole[], json = true): Record<string, string> {
+  const base: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
+  return accessToken ? { ...base, Authorization: `Bearer ${accessToken}` } : { ...base, "x-staff-roles": roles.join(",") };
+}
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>("overview");
+  const [staff, setStaff] = useState<Staff | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [board, setBoard] = useState<BoardColumn[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [rosterError, setRosterError] = useState("");
+
+  async function refresh() {
+    const [ordersRes, metricsRes, boardRes, invRes, moveRes, rosterRes] = await Promise.all([
+      fetch(`${apiUrl}/orders`),
+      fetch(`${apiUrl}/reports/summary`),
+      fetch(`${apiUrl}/production/board`),
+      fetch(`${apiUrl}/inventory`),
+      fetch(`${apiUrl}/inventory/movements`, { headers: headers(["manager"], false) }),
+      fetch(`${apiUrl}/staff/roster`, { headers: headers(["manager"], false) })
+    ]);
+    if (ordersRes.ok) setOrders(((await ordersRes.json()) as { orders: Order[] }).orders);
+    if (metricsRes.ok) setMetrics(((await metricsRes.json()) as { metrics: Metrics }).metrics);
+    if (boardRes.ok) setBoard(((await boardRes.json()) as { columns: BoardColumn[] }).columns);
+    if (invRes.ok) setInventory(((await invRes.json()) as { items: InventoryItem[] }).items);
+    if (moveRes.ok) setMovements(((await moveRes.json()) as { movements: StockMovement[] }).movements);
+    if (rosterRes.ok) { setRoster(((await rosterRes.json()) as { roster: RosterMember[] }).roster); setRosterError(""); }
+    else setRosterError("Manager/owner access is required to load the staff roster.");
+  }
+
+  useEffect(() => {
+    if (staff) void refresh();
+  }, [staff]);
+
+  async function assign(orderId: string, staffId: string) {
+    await fetch(`${apiUrl}/orders/${orderId}`, {
+      method: "PATCH",
+      headers: headers(["manager"]),
+      body: JSON.stringify({ staffAssigneeId: staffId })
+    });
+    await refresh();
+  }
+
+  async function moveStock(itemId: string, kind: "receive" | "issue", quantity: number) {
+    if (!quantity || quantity <= 0) return;
+    await fetch(`${apiUrl}/inventory/${itemId}/${kind}`, {
+      method: "POST",
+      headers: headers(["manager"]),
+      body: JSON.stringify({ quantity })
+    });
+    await refresh();
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Text style={styles.logo}>Finesse Manager</Text>
+        <Text style={styles.subtle}>Owner &amp; manager · whole-shop tracking</Text>
+      </View>
+      {staff ? (
+        <View style={styles.tabs}>
+          {(["overview", "team", "stock"] as Tab[]).map((item) => (
+            <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
+              <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item.toUpperCase()}</Text>
+            </Pressable>
+          ))}
+          <Pressable style={styles.tab} onPress={() => void refresh()}><Text style={styles.tabText}>REFRESH</Text></Pressable>
+        </View>
+      ) : null}
+      <ScrollView contentContainerStyle={styles.page}>
+        {!staff ? <Login onLogin={(next) => { accessToken = next.token ?? ""; setStaff(next); }} /> : null}
+        {staff && tab === "overview" ? <Overview orders={orders} metrics={metrics} board={board} inventory={inventory} /> : null}
+        {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAssign={assign} /> : null}
+        {staff && tab === "stock" ? <Stock inventory={inventory} movements={movements} onMove={moveStock} /> : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const presets: { label: string; name: string; roles: StaffRole[] }[] = [
+    { label: "Owner", name: "Finesse Owner", roles: ["owner"] },
+    { label: "Manager", name: "Shop Manager", roles: ["manager"] }
+  ];
+
+  async function signIn() {
+    setMessage("");
+    const authRes = await fetch(`${apiUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    if (!authRes.ok) { setMessage("Invalid email or password."); return; }
+    const authPayload = await authRes.json() as { token: string };
+    const sessionRes = await fetch(`${apiUrl}/auth/session`, { headers: { Authorization: `Bearer ${authPayload.token}` } });
+    if (!sessionRes.ok) { setMessage("This account has no active Finesse staff profile."); return; }
+    const sessionPayload = await sessionRes.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
+    onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Owner &amp; manager access</Text>
+      <Text style={styles.title}>Sign in</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Manager login</Text>
+        <Text style={styles.muted}>Track sales, jobs in production, collections, and staff workload across the whole shop.</Text>
+        <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
+        <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+        {message ? <Text style={styles.warning}>{message}</Text> : null}
+        <Pressable style={styles.button} onPress={() => void signIn()}><Text style={styles.buttonText}>Sign in</Text></Pressable>
+        <Text style={styles.muted}>Local development shortcuts</Text>
+        <View style={styles.grid}>
+          {presets.map((preset) => (
+            <Pressable style={styles.tile} key={preset.label} onPress={() => onLogin({ name: preset.name, roles: preset.roles })}>
+              <Text style={styles.tileTitle}>{preset.label}</Text>
+              <Text style={styles.muted}>{preset.roles.join(", ")}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function Overview({ orders, metrics, board, inventory }: { orders: Order[]; metrics: Metrics | null; board: BoardColumn[]; inventory: InventoryItem[] }) {
+  const ready = orders.filter((order) => order.status === "ready_for_collection");
+  const outstanding = orders.filter((order) => order.balanceDue > 0 && order.status !== "cancelled").sort((a, b) => b.balanceDue - a.balanceDue).slice(0, 6);
+  const lowStock = inventory.filter((item) => item.quantityOnHand <= item.reorderPoint);
+  const activeCount = orders.filter((order) => ACTIVE.includes(order.status)).length;
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Live shop status</Text>
+      <Text style={styles.title}>Overview</Text>
+
+      <View style={styles.kpiRow}>
+        <Kpi label="Sales to date" value={`R${(metrics?.totalSales ?? 0).toLocaleString()}`} />
+        <Kpi label="Active jobs" value={String(activeCount)} />
+        <Kpi label="Outstanding" value={`R${(metrics?.outstandingBalances ?? 0).toLocaleString()}`} />
+        <Kpi label="Ready to collect" value={String(ready.length)} />
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Jobs by stage</Text>
+        {board.map((column) => (
+          <View style={styles.rowBetween} key={column.status}>
+            <Text style={styles.muted}>{column.label}</Text>
+            <Text style={styles.pill}>{column.orders.length}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Ready for collection ({ready.length})</Text>
+        {ready.length === 0 ? <Text style={styles.muted}>Nothing waiting for collection.</Text> : null}
+        {ready.map((order) => (
+          <View style={styles.rowBetween} key={order.id}>
+            <Text style={styles.muted}>{order.orderNumber} · {order.customer.name}</Text>
+            <Text style={styles.pill}>{order.customer.mobile}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Outstanding balances</Text>
+        {outstanding.length === 0 ? <Text style={styles.muted}>All balances settled.</Text> : null}
+        {outstanding.map((order) => (
+          <View style={styles.rowBetween} key={order.id}>
+            <Text style={styles.muted}>{order.orderNumber} · {order.customer.name}</Text>
+            <Text style={styles.pill}>R{order.balanceDue.toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Low stock ({lowStock.length})</Text>
+        {lowStock.length === 0 ? <Text style={styles.muted}>Stock levels are healthy.</Text> : null}
+        {lowStock.map((item) => (
+          <View style={styles.rowBetween} key={item.id}>
+            <Text style={styles.muted}>{item.name}</Text>
+            <Text style={styles.pill}>{item.quantityOnHand} / {item.reorderPoint}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Team({ orders, roster, error, onAssign }: { orders: Order[]; roster: RosterMember[]; error: string; onAssign: (orderId: string, staffId: string) => Promise<void> }) {
+  const done = ["completed", "cancelled"];
+  const active = orders.filter((order) => !done.includes(order.status));
+  const unassigned = active.filter((order) => !order.staffAssigneeId);
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Manager &amp; supervisor</Text>
+      <Text style={styles.title}>Team workload</Text>
+      {error ? <Text style={styles.warning}>{error}</Text> : null}
+
+      <View style={styles.kpiRow}>
+        <Kpi label="Team" value={String(roster.length)} />
+        <Kpi label="Active jobs" value={String(active.length)} />
+        <Kpi label="Unassigned" value={String(unassigned.length)} />
+        <Kpi label="Completed" value={String(orders.filter((order) => order.status === "completed").length)} />
+      </View>
+
+      {unassigned.length > 0 ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Unassigned jobs ({unassigned.length})</Text>
+          <Text style={styles.muted}>Tap a team member to assign.</Text>
+          {unassigned.map((order) => (
+            <View style={styles.job} key={order.id}>
+              <Text style={styles.tileTitle}>{order.orderNumber} · {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+              <Text style={styles.muted}>{statusLabel(order.status)}</Text>
+              <View style={styles.row}>
+                {roster.map((member) => (
+                  <Pressable style={styles.chip} key={member.id} onPress={() => void onAssign(order.id, member.id)}>
+                    <Text style={styles.chipText}>{member.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {roster.map((member) => {
+        const jobs = active.filter((order) => order.staffAssigneeId === member.id);
+        const completed = orders.filter((order) => order.staffAssigneeId === member.id && order.status === "completed").length;
+        const rush = jobs.filter((order) => order.rush).length;
+        return (
+          <View style={styles.panel} key={member.id}>
+            <Text style={styles.panelTitle}>{member.name} <Text style={styles.role}>· {member.role.replace("_", " ")}</Text></Text>
+            <Text style={styles.muted}>{jobs.length} active · {rush} rush · {completed} done</Text>
+            {jobs.length === 0 ? <Text style={styles.muted}>No active jobs.</Text> : null}
+            {jobs.map((order) => (
+              <View style={styles.job} key={order.id}>
+                <Text style={styles.tileTitle}>{order.orderNumber} · {order.customer.name}</Text>
+                <Text style={styles.muted}>{statusLabel(order.status)}{order.activityLog[0] ? ` · ${order.activityLog[0].message}` : ""}</Text>
+                <Pressable style={styles.shareBtn} onPress={() => void shareInvoice(order)}>
+                  <Text style={styles.chipText}>Share invoice</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+      {roster.length === 0 && !error ? <Text style={styles.muted}>No active staff found.</Text> : null}
+    </View>
+  );
+}
+
+function Stock({ inventory, movements, onMove }: { inventory: InventoryItem[]; movements: StockMovement[]; onMove: (itemId: string, kind: "receive" | "issue", quantity: number) => Promise<void> }) {
+  const [qty, setQty] = useState<Record<string, string>>({});
+  const lowCount = inventory.filter((item) => item.quantityOnHand <= item.reorderPoint).length;
+
+  function submit(itemId: string, kind: "receive" | "issue") {
+    const value = Number(qty[itemId]);
+    if (!Number.isFinite(value) || value <= 0) return;
+    void onMove(itemId, kind, value).then(() => setQty((prev) => ({ ...prev, [itemId]: "" })));
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Inventory</Text>
+      <Text style={styles.title}>Stock</Text>
+
+      <View style={styles.kpiRow}>
+        <Kpi label="Items" value={String(inventory.length)} />
+        <Kpi label="Low stock" value={String(lowCount)} />
+      </View>
+
+      {inventory.map((item) => {
+        const low = item.quantityOnHand <= item.reorderPoint;
+        return (
+          <View style={styles.panel} key={item.id}>
+            <Text style={styles.panelTitle}>{item.name} {low ? <Text style={styles.role}>· LOW</Text> : null}</Text>
+            <Text style={styles.muted}>{item.sku} · On hand {item.quantityOnHand} · Reorder at {item.reorderPoint}</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="number-pad"
+              placeholder="Quantity"
+              value={qty[item.id] ?? ""}
+              onChangeText={(value) => setQty((prev) => ({ ...prev, [item.id]: value }))}
+            />
+            <View style={styles.row}>
+              <Pressable style={styles.button} onPress={() => submit(item.id, "receive")}><Text style={styles.buttonText}>Stock in</Text></Pressable>
+              <Pressable style={styles.shareBtn} onPress={() => submit(item.id, "issue")}><Text style={styles.chipText}>Stock out</Text></Pressable>
+            </View>
+          </View>
+        );
+      })}
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Recent stock movements</Text>
+        {movements.length === 0 ? <Text style={styles.muted}>No movements recorded yet.</Text> : null}
+        {movements.slice(0, 30).map((movement) => (
+          <View style={styles.job} key={movement.id}>
+            <Text style={styles.tileTitle}>{movement.itemName} · {MOVEMENT_LABEL[movement.type] ?? movement.type} ({movement.delta >= 0 ? "+" : ""}{movement.delta})</Text>
+            <Text style={styles.muted}>{new Date(movement.createdAt).toLocaleString("en-ZA")} · now {movement.quantityAfter} · {movement.actorName}{movement.note ? ` · ${movement.note}` : ""}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.kpi}>
+      <Text style={styles.kpiLabel}>{label}</Text>
+      <Text style={styles.kpiValue}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#eef2f8" },
+  header: { backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, padding: 18 },
+  logo: { color: "#0f1f3d", fontSize: 24, fontWeight: "800" },
+  subtle: { color: "#5b6b86", marginTop: 4 },
+  tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 12, backgroundColor: "#ffffff" },
+  tab: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9 },
+  activeTab: { backgroundColor: "#c19a3e", borderColor: "#c19a3e" },
+  tabText: { color: "#5b6b86", fontSize: 12, fontWeight: "700" },
+  activeTabText: { color: "#0f1f3d" },
+  page: { gap: 16, padding: 18 },
+  eyebrow: { color: "#9a7b22", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  title: { color: "#0f1f3d", fontSize: 34, fontWeight: "800", marginBottom: 14, marginTop: 4 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 },
+  tile: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderLeftColor: "#c19a3e", borderLeftWidth: 5, borderRadius: 8, borderWidth: 1, minWidth: 150, padding: 14 },
+  tileTitle: { color: "#0f1f3d", fontSize: 16, fontWeight: "800" },
+  muted: { color: "#5b6b86", lineHeight: 20, marginTop: 4 },
+  panel: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 14, padding: 16 },
+  panelTitle: { color: "#0f1f3d", fontSize: 18, fontWeight: "800" },
+  role: { color: "#5b6b86", fontSize: 13, fontWeight: "600" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  rowBetween: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingVertical: 7 },
+  button: { backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  buttonText: { color: "#ffffff", fontWeight: "800", textAlign: "center" },
+  input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 44, paddingHorizontal: 10 },
+  warning: { color: "#b91c1c", fontWeight: "800", marginTop: 10 },
+  job: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 12 },
+  pill: { backgroundColor: "#f3ecd9", borderRadius: 999, color: "#0f1f3d", fontWeight: "700", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 4 },
+  chip: { backgroundColor: "#0f1f3d", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  chipText: { color: "#ffffff", fontWeight: "700" },
+  shareBtn: { alignSelf: "flex-start", backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  kpi: { backgroundColor: "#0f1f3d", borderRadius: 12, flexGrow: 1, minWidth: 150, padding: 14 },
+  kpiLabel: { color: "#d9c489", fontSize: 12, fontWeight: "700" },
+  kpiValue: { color: "#ffffff", fontSize: 24, fontWeight: "900", marginTop: 4 }
+});

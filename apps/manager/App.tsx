@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { statusLabel } from "@printflow/shared";
 import type { Order, StaffRole } from "@printflow/shared";
 
@@ -15,8 +15,8 @@ const MOVEMENT_LABEL: Record<string, string> = {
 type Metrics = { totalSales: number; activeOrders: number; averageOrderValue: number; outstandingBalances: number };
 type BoardColumn = { status: string; label: string; orders: Order[] };
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
-const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3000";
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
+const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "https://finesse-web.vercel.app";
 const ACTIVE = ["new", "awaiting_artwork", "design_review", "approved", "in_production", "quality_check"];
 let accessToken = "";
 
@@ -42,23 +42,35 @@ export default function App() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [rosterError, setRosterError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function logout() {
+    accessToken = "";
+    setStaff(null);
+    setTab("overview");
+  }
 
   async function refresh() {
-    const [ordersRes, metricsRes, boardRes, invRes, moveRes, rosterRes] = await Promise.all([
-      fetch(`${apiUrl}/orders`),
-      fetch(`${apiUrl}/reports/summary`),
-      fetch(`${apiUrl}/production/board`),
-      fetch(`${apiUrl}/inventory`),
-      fetch(`${apiUrl}/inventory/movements`, { headers: headers(["manager"], false) }),
-      fetch(`${apiUrl}/staff/roster`, { headers: headers(["manager"], false) })
-    ]);
-    if (ordersRes.ok) setOrders(((await ordersRes.json()) as { orders: Order[] }).orders);
-    if (metricsRes.ok) setMetrics(((await metricsRes.json()) as { metrics: Metrics }).metrics);
-    if (boardRes.ok) setBoard(((await boardRes.json()) as { columns: BoardColumn[] }).columns);
-    if (invRes.ok) setInventory(((await invRes.json()) as { items: InventoryItem[] }).items);
-    if (moveRes.ok) setMovements(((await moveRes.json()) as { movements: StockMovement[] }).movements);
-    if (rosterRes.ok) { setRoster(((await rosterRes.json()) as { roster: RosterMember[] }).roster); setRosterError(""); }
-    else setRosterError("Manager/owner access is required to load the staff roster.");
+    setLoading(true);
+    try {
+      const [ordersRes, metricsRes, boardRes, invRes, moveRes, rosterRes] = await Promise.all([
+        fetch(`${apiUrl}/orders`),
+        fetch(`${apiUrl}/reports/summary`),
+        fetch(`${apiUrl}/production/board`),
+        fetch(`${apiUrl}/inventory`),
+        fetch(`${apiUrl}/inventory/movements`, { headers: headers(["manager"], false) }),
+        fetch(`${apiUrl}/staff/roster`, { headers: headers(["manager"], false) })
+      ]);
+      if (ordersRes.ok) setOrders(((await ordersRes.json()) as { orders: Order[] }).orders);
+      if (metricsRes.ok) setMetrics(((await metricsRes.json()) as { metrics: Metrics }).metrics);
+      if (boardRes.ok) setBoard(((await boardRes.json()) as { columns: BoardColumn[] }).columns);
+      if (invRes.ok) setInventory(((await invRes.json()) as { items: InventoryItem[] }).items);
+      if (moveRes.ok) setMovements(((await moveRes.json()) as { movements: StockMovement[] }).movements);
+      if (rosterRes.ok) { setRoster(((await rosterRes.json()) as { roster: RosterMember[] }).roster); setRosterError(""); }
+      else setRosterError("Manager/owner access is required to load the staff roster.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -87,9 +99,17 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Finesse Manager</Text>
-        <Text style={styles.subtle}>Owner &amp; manager · whole-shop tracking</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.logo}>Finesse Manager</Text>
+          <Text style={styles.subtle}>Owner &amp; manager · whole-shop tracking</Text>
+        </View>
+        {staff ? (
+          <Pressable style={styles.signOut} onPress={logout}><Text style={styles.signOutText}>Sign out</Text></Pressable>
+        ) : null}
       </View>
+      {staff && loading ? (
+        <View style={styles.loadingRow}><ActivityIndicator color="#c19a3e" /><Text style={styles.muted}>Loading…</Text></View>
+      ) : null}
       {staff ? (
         <View style={styles.tabs}>
           {(["overview", "team", "stock"] as Tab[]).map((item) => (
@@ -100,7 +120,10 @@ export default function App() {
           <Pressable style={styles.tab} onPress={() => void refresh()}><Text style={styles.tabText}>REFRESH</Text></Pressable>
         </View>
       ) : null}
-      <ScrollView contentContainerStyle={styles.page}>
+      <ScrollView
+        contentContainerStyle={styles.page}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { if (staff) void refresh(); }} tintColor="#c19a3e" colors={["#c19a3e"]} />}
+      >
         {!staff ? <Login onLogin={(next) => { accessToken = next.token ?? ""; setStaff(next); }} /> : null}
         {staff && tab === "overview" ? <Overview orders={orders} metrics={metrics} board={board} inventory={inventory} /> : null}
         {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAssign={assign} /> : null}
@@ -114,6 +137,7 @@ function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   const presets: { label: string; name: string; roles: StaffRole[] }[] = [
     { label: "Owner", name: "Finesse Owner", roles: ["owner"] },
     { label: "Manager", name: "Shop Manager", roles: ["manager"] }
@@ -121,17 +145,24 @@ function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
 
   async function signIn() {
     setMessage("");
-    const authRes = await fetch(`${apiUrl}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    if (!authRes.ok) { setMessage("Invalid email or password."); return; }
-    const authPayload = await authRes.json() as { token: string };
-    const sessionRes = await fetch(`${apiUrl}/auth/session`, { headers: { Authorization: `Bearer ${authPayload.token}` } });
-    if (!sessionRes.ok) { setMessage("This account has no active Finesse staff profile."); return; }
-    const sessionPayload = await sessionRes.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
-    onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
+    setBusy(true);
+    try {
+      const authRes = await fetch(`${apiUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      if (!authRes.ok) { setMessage("Invalid email or password."); return; }
+      const authPayload = await authRes.json() as { token: string };
+      const sessionRes = await fetch(`${apiUrl}/auth/session`, { headers: { Authorization: `Bearer ${authPayload.token}` } });
+      if (!sessionRes.ok) { setMessage("This account has no active Finesse staff profile."); return; }
+      const sessionPayload = await sessionRes.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
+      onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -144,7 +175,9 @@ function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
         <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
         <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
         {message ? <Text style={styles.warning}>{message}</Text> : null}
-        <Pressable style={styles.button} onPress={() => void signIn()}><Text style={styles.buttonText}>Sign in</Text></Pressable>
+        <Pressable style={[styles.button, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void signIn()}>
+          {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+        </Pressable>
         <Text style={styles.muted}>Local development shortcuts</Text>
         <View style={styles.grid}>
           {presets.map((preset) => (
@@ -353,7 +386,11 @@ function Kpi({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#eef2f8" },
-  header: { backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, padding: 18 },
+  header: { alignItems: "center", backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", padding: 18 },
+  signOut: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  signOutText: { color: "#0f1f3d", fontWeight: "800" },
+  loadingRow: { alignItems: "center", backgroundColor: "#ffffff", flexDirection: "row", gap: 8, paddingBottom: 8, paddingHorizontal: 18 },
+  buttonDisabled: { opacity: 0.6 },
   logo: { color: "#0f1f3d", fontSize: 24, fontWeight: "800" },
   subtle: { color: "#5b6b86", marginTop: 4 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 12, backgroundColor: "#ffffff" },

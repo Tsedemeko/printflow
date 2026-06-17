@@ -1,8 +1,5 @@
 import { PortalShell } from "../../components/PortalShell";
-import { CatalogManager } from "../../components/CatalogManager";
 import { CounterQueuePanel } from "../../components/CounterQueuePanel";
-import { DepositRulesManager } from "../../components/DepositRulesManager";
-import { DiscountRulesManager } from "../../components/DiscountRulesManager";
 import { getAdminData } from "../../lib/api-data";
 
 export default async function AdminPage() {
@@ -18,16 +15,17 @@ export default async function AdminPage() {
       </section>
       <section className="admin-grid">
         <CounterQueuePanel />
-        <DiscountRulesManager initialRules={data.discountRules} />
-        <DepositRulesManager initialRules={data.depositRules} />
-        <CatalogManager initialProducts={data.products} />
         <article className="card glossy section-gold">
           <h2>Staff alerts</h2>
           <p>New kiosk customer waiting, artwork uploaded, design proofs pending, low-stock warnings.</p>
         </article>
         <article className="card glossy section-green">
+          <h2>Catalog, pricing &amp; deposits</h2>
+          <p>Manage your service catalog, deposit rules, and bulk discounts under <a href="/settings">Settings</a>.</p>
+        </article>
+        <article className="card glossy">
           <h2>Owner controls</h2>
-          <p>Use Orders, Staff & Roles, Inventory, Service Mix, pricing, and production views for day-to-day operations.</p>
+          <p>Use Orders, Staff &amp; Roles, Inventory, Reports, and production views for day-to-day operations.</p>
         </article>
       </section>
     </PortalShell>

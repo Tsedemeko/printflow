@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useKeepAwake } from "expo-keep-awake";
 import { calculateRequiredDeposit, priceQuote } from "@printflow/shared";
 import { kioskData } from "./src/demo";
 
 type KioskStep = "categories" | "products" | "customize" | "customer" | "ticket" | "collect";
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
 
 const categories = [
   { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
@@ -25,6 +25,8 @@ export default function App() {
   const [queuePosition, setQueuePosition] = useState(1);
   const [lookupReference, setLookupReference] = useState("");
   const [lookupResult, setLookupResult] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [checking, setChecking] = useState(false);
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
   const selectedOptions = useMemo(() => Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])), [product]);
   const quote = useMemo(() => {
@@ -33,22 +35,29 @@ export default function App() {
   const deposit = calculateRequiredDeposit(quote.total, quote.items);
 
   async function createPreOrder() {
-    const response = await fetch(`${apiUrl}/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: "kiosk",
-        customer: { name: customerName, mobile: customerMobile },
-        items: [{ productId: product.id, quantity: 1, selectedOptions }]
-      })
-    });
-    const payload = await response.json();
-    setTicketNumber(payload.order?.orderNumber ?? "Order created");
-    setQueuePosition(payload.counterTicket?.position ?? 1);
-    setStep("ticket");
+    setCreating(true);
+    try {
+      const response = await fetch(`${apiUrl}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "kiosk",
+          customer: { name: customerName, mobile: customerMobile },
+          items: [{ productId: product.id, quantity: 1, selectedOptions }]
+        })
+      });
+      const payload = await response.json();
+      setTicketNumber(payload.order?.orderNumber ?? "Order created");
+      setQueuePosition(payload.counterTicket?.position ?? 1);
+      setStep("ticket");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function lookupOrder() {
+    setChecking(true);
+    try {
     const response = await fetch(`${apiUrl}/orders/lookup/${encodeURIComponent(lookupReference)}`);
     if (!response.ok) {
       setLookupResult("Order not found. Please check the reference or ask the counter team.");
@@ -63,6 +72,9 @@ export default function App() {
     } else {
       const eta = order.dueAt ? new Date(order.dueAt).toLocaleString("en-ZA", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
       setLookupResult(`${order.orderNumber} is ${String(order.status).replaceAll("_", " ")}.${eta ? ` Estimated ready: ${eta}.` : ""} We'll SMS you as soon as it's ready.${order.balanceDue > 0 ? ` Balance R${order.balanceDue.toFixed(2)}.` : ""}`);
+    }
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -158,7 +170,9 @@ export default function App() {
               <TextInput style={styles.input} placeholder="Mobile number" keyboardType="phone-pad" value={customerMobile} onChangeText={setCustomerMobile} />
               <TextInput style={styles.input} placeholder="Name" value={customerName} onChangeText={setCustomerName} />
               <Text style={styles.muted}>We will send your queue number and secure artwork upload link by SMS.</Text>
-              <Pressable style={styles.button} onPress={() => void createPreOrder()}><Text style={styles.buttonText}>Create pre-order</Text></Pressable>
+              <Pressable style={[styles.button, creating && styles.buttonDisabled]} disabled={creating} onPress={() => void createPreOrder()}>
+                {creating ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Create pre-order</Text>}
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -188,7 +202,9 @@ export default function App() {
               </View>
               <View style={styles.row}>
                 <Pressable style={styles.secondaryButton} onPress={() => setStep("categories")}><Text style={styles.secondaryButtonText}>Back</Text></Pressable>
-                <Pressable style={styles.button} onPress={() => void lookupOrder()}><Text style={styles.buttonText}>Check status</Text></Pressable>
+                <Pressable style={[styles.button, checking && styles.buttonDisabled]} disabled={checking} onPress={() => void lookupOrder()}>
+                  {checking ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Check status</Text>}
+                </Pressable>
               </View>
             </View>
           </View>
@@ -218,7 +234,8 @@ const styles = StyleSheet.create({
   optionText: { color: "#0f1f3d", fontWeight: "800" },
   total: { color: "#0f1f3d", fontSize: 18, fontWeight: "900", marginTop: 12 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
-  button: { backgroundColor: "#0f1f3d", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
+  button: { alignItems: "center", backgroundColor: "#0f1f3d", borderRadius: 8, minHeight: 44, justifyContent: "center", paddingHorizontal: 14, paddingVertical: 12 },
+  buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#ffffff", fontWeight: "900" },
   secondaryButton: { backgroundColor: "#ffffff", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
   secondaryButtonText: { color: "#0f1f3d", fontWeight: "900" },

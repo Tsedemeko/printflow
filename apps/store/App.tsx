@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
 import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
 
 type Tab = "mywork" | "counter" | "jobs" | "pos" | "shop";
 type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
-const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3000";
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
+const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "https://finesse-web.vercel.app";
 let staffAccessToken = "";
 
 async function shareInvoice(order: Order) {
@@ -22,7 +22,14 @@ export default function App() {
   const [staff, setStaff] = useState<Staff | null>(null);
   const [orders, setOrders] = useState<Order[]>(storeData.orders);
   const [counterQueue, setCounterQueue] = useState<CounterQueueTicket[]>([]);
+  const [loading, setLoading] = useState(false);
   const tabs = staff ? tabsForRoles(staff.roles) : [];
+
+  function logout() {
+    staffAccessToken = "";
+    setStaff(null);
+    setTab("counter");
+  }
 
   async function refreshOrders() {
     const response = await fetch(`${apiUrl}/orders`);
@@ -40,19 +47,34 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (staff) {
-      void refreshOrders();
-      void refreshCounterQueue();
+  async function refreshAll() {
+    if (!staff) return;
+    setLoading(true);
+    try {
+      await Promise.all([refreshOrders(), refreshCounterQueue()]);
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    if (staff) void refreshAll();
   }, [staff]);
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Finesse Staff</Text>
-        <Text style={styles.subtle}>Embroidery · Heat Press · Garment Design</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.logo}>Finesse Staff</Text>
+          <Text style={styles.subtle}>Embroidery · Heat Press · Garment Design</Text>
+        </View>
+        {staff ? (
+          <Pressable style={styles.signOut} onPress={logout}><Text style={styles.signOutText}>Sign out</Text></Pressable>
+        ) : null}
       </View>
+      {staff && loading ? (
+        <View style={styles.loadingRow}><ActivityIndicator color="#c19a3e" /><Text style={styles.muted}>Loading…</Text></View>
+      ) : null}
       {staff ? (
         <View style={styles.tabs}>
           {tabs.map((item) => (
@@ -62,7 +84,10 @@ export default function App() {
           ))}
         </View>
       ) : null}
-      <ScrollView contentContainerStyle={styles.page}>
+      <ScrollView
+        contentContainerStyle={styles.page}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refreshAll()} tintColor="#c19a3e" colors={["#c19a3e"]} />}
+      >
         {!staff ? <MobileLogin onLogin={(nextStaff) => {
           staffAccessToken = nextStaff.token ?? "";
           setStaff(nextStaff);
@@ -83,6 +108,7 @@ function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   const presets: { label: string; name: string; roles: StaffRole[] }[] = [
     { label: "Designer", name: "Lead Designer", roles: ["designer"] },
     { label: "Embroidery & Press", name: "Embroidery & Press Operator", roles: ["apparel_operator"] },
@@ -92,25 +118,32 @@ function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
 
   async function signIn() {
     setMessage("");
-    const authResponse = await fetch(`${apiUrl}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    if (!authResponse.ok) {
-      setMessage("Invalid staff email or password.");
-      return;
+    setBusy(true);
+    try {
+      const authResponse = await fetch(`${apiUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      if (!authResponse.ok) {
+        setMessage("Invalid staff email or password.");
+        return;
+      }
+      const authPayload = await authResponse.json() as { token: string };
+      const sessionResponse = await fetch(`${apiUrl}/auth/session`, {
+        headers: { Authorization: `Bearer ${authPayload.token}` }
+      });
+      if (!sessionResponse.ok) {
+        setMessage("This account does not have an active Finesse staff profile.");
+        return;
+      }
+      const sessionPayload = await sessionResponse.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
+      onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setBusy(false);
     }
-    const authPayload = await authResponse.json() as { token: string };
-    const sessionResponse = await fetch(`${apiUrl}/auth/session`, {
-      headers: { Authorization: `Bearer ${authPayload.token}` }
-    });
-    if (!sessionResponse.ok) {
-      setMessage("This account does not have an active Finesse staff profile.");
-      return;
-    }
-    const sessionPayload = await sessionResponse.json() as { user: { id?: string; name: string; roles: StaffRole[] } };
-    onLogin({ id: sessionPayload.user.id, name: sessionPayload.user.name, roles: sessionPayload.user.roles, token: authPayload.token });
   }
 
   return (
@@ -125,7 +158,9 @@ function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
           <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Staff email" autoCapitalize="none" keyboardType="email-address" />
           <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
           {message ? <Text style={styles.warning}>{message}</Text> : null}
-          <Pressable style={styles.button} onPress={() => void signIn()}><Text style={styles.buttonText}>Sign in</Text></Pressable>
+          <Pressable style={[styles.button, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void signIn()}>
+            {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+          </Pressable>
         </View>
         <Text style={styles.muted}>Local development shortcuts</Text>
         <View style={styles.grid}>
@@ -478,7 +513,10 @@ function staffHeaders(roles: StaffRole[]): Record<string, string> {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#eef2f8" },
-  header: { backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, padding: 18 },
+  header: { alignItems: "center", backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", padding: 18 },
+  signOut: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  signOutText: { color: "#0f1f3d", fontWeight: "800" },
+  loadingRow: { alignItems: "center", backgroundColor: "#ffffff", flexDirection: "row", gap: 8, paddingBottom: 8, paddingHorizontal: 18 },
   logo: { color: "#0f1f3d", fontSize: 24, fontWeight: "800" },
   subtle: { color: "#5b6b86", marginTop: 4 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 12, backgroundColor: "#ffffff" },

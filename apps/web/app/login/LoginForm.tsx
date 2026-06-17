@@ -15,14 +15,16 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("owner");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setLoading(true);
     if (!email || !password) {
       login(name, role);
       router.push("/admin");
-      return;
+      return; // keep loading=true through navigation
     }
     try {
       const authResponse = await fetch(`${apiUrl}/auth/login`, {
@@ -41,6 +43,7 @@ export function LoginForm() {
       router.push("/admin");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Could not sign in.");
+      setLoading(false);
     }
   }
 
@@ -71,7 +74,9 @@ export function LoginForm() {
         </select>
       </label>
       {error ? <p className="form-error">{error}</p> : null}
-      <button type="submit">Enter admin portal</button>
+      <button type="submit" disabled={loading}>
+        {loading ? <><span className="btn-spinner" aria-hidden="true" /> Signing in…</> : "Enter admin portal"}
+      </button>
       <div className="row">
         <a className="button secondary" href="/order">Public online order</a>
         <a className="button secondary" href="/kiosk">Public kiosk</a>

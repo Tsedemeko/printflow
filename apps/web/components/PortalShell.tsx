@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { AuthGate, useLocalSession } from "./AuthGate";
 
 const menu = [
@@ -16,12 +17,21 @@ const menu = [
   { href: "/inventory", label: "Inventory", icon: "I" },
   { href: "/reports", label: "Reports", icon: "R" },
   { href: "/notifications", label: "Notifications", icon: "N" },
-  { href: "/staff", label: "Staff & Roles", icon: "S" }
+  { href: "/staff", label: "Staff & Roles", icon: "S" },
+  { href: "/settings", label: "Settings", icon: "⚙" }
 ];
 
 export function PortalShell({ title, eyebrow, children }: { title: string; eyebrow: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const { session, logout } = useLocalSession();
+  const [signingOut, setSigningOut] = useState(false);
+
+  function signOut() {
+    setSigningOut(true);
+    logout();
+    // Full navigation so every component (incl. AuthGate) re-reads the cleared session.
+    window.location.assign("/login");
+  }
 
   return (
     <AuthGate>
@@ -53,7 +63,9 @@ export function PortalShell({ title, eyebrow, children }: { title: string; eyebr
             <div className="user-chip">
               <span>{session?.name ?? "Staff"}</span>
               <small>{session?.role ?? "local"}</small>
-              <button className="secondary compact" onClick={logout} type="button">Sign out</button>
+              <button className="secondary compact" disabled={signingOut} onClick={signOut} type="button">
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
             </div>
           </header>
           {children}

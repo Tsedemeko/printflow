@@ -4,7 +4,9 @@ services:
     runtime: node
     plan: free
     # Build at the repo root so the @printflow/shared workspace links and is compiled first.
-    buildCommand: npm install && npm run build -w @printflow/shared && npm run build -w @printflow/api
+    # --include=dev: NODE_ENV=production makes npm omit devDeps, but the build needs
+    # typescript + @types, so force them in. (Runtime only needs prod deps.)
+    buildCommand: npm install --include=dev && npm run build -w @printflow/shared && npm run build -w @printflow/api
     startCommand: node apps/api/dist/server.js
     healthCheckPath: /health
     autoDeploy: true

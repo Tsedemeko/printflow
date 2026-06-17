@@ -6,7 +6,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
       "@printflow/shared": ["../../packages/shared/dist/src/index"],
       "@printflow/shared/*": ["../../packages/shared/dist/src/*"]

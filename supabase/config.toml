@@ -1,0 +1,4 @@
+# Minimal Supabase CLI config. The remote project is selected in CI via
+# `supabase link --project-ref <ref>` (SUPABASE_PROJECT_REF secret), so this
+# project_id is just a local identifier.
+project_id = "finesse"

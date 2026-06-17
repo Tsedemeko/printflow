@@ -209,6 +209,7 @@ export async function hydratePersistentState() {
     catalog: remoteState.catalog?.length ? remoteState.catalog : state.catalog,
     depositRules: remoteState.depositRules?.length ? remoteState.depositRules : state.depositRules,
     discountRules: remoteState.discountRules?.length ? remoteState.discountRules : state.discountRules,
+    inventory: remoteState.inventory?.length ? remoteState.inventory : state.inventory,
     staff
   });
   remoteHydrated = true;

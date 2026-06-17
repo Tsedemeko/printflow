@@ -92,7 +92,7 @@ create table orders (
   required_deposit numeric(12,2) not null default 0,
   balance_due numeric(12,2) not null default 0,
   queue_name text not null,
-  staff_assignee_id uuid references profiles(id),
+  staff_assignee_id text references profiles(id),
   rush boolean not null default false,
   internal_notes jsonb not null default '[]',
   activity_log jsonb not null default '[]',
@@ -202,7 +202,7 @@ create table counter_queue_tickets (
 
 create table audit_logs (
   id text primary key default gen_random_uuid()::text,
-  actor_id uuid,
+  actor_id text,
   actor_type text not null,
   entity_type text not null,
   entity_id text not null,

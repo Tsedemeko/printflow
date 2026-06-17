@@ -19,6 +19,8 @@ export async function supabaseRest<T>(path: string, init: RequestInit = {}): Pro
     const body = await response.text();
     throw new Error(`Supabase REST ${response.status}: ${body}`);
   }
-  if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+  // PostgREST writes often return an empty body (e.g. 201/204 with Prefer: return=minimal),
+  // so only parse JSON when there's actually a body.
+  const text = await response.text();
+  return (text.length ? JSON.parse(text) : undefined) as T;
 }

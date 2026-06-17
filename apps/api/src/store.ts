@@ -213,7 +213,13 @@ export async function hydratePersistentState() {
     staff
   });
   remoteHydrated = true;
-  await persistSupabaseState(state);
+  // Persist the merged state (seed reference data) back to Supabase, but never let a
+  // persistence error crash startup — the API can still serve from in-memory state.
+  try {
+    await persistSupabaseState(state);
+  } catch (error) {
+    console.error("Initial Supabase persistence failed (continuing):", error);
+  }
 }
 
 export function createOrder(input: CreateOrderInput): Order {

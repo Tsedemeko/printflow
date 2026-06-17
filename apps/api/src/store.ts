@@ -97,22 +97,33 @@ const dataFile = join(dataDir, "printflow.local.json");
 let remoteHydrated = false;
 
 const initialState: AppState = {
-  customers: [
-    {
-      id: "customer-demo",
-      name: "Mrs. Smith",
-      mobile: "+27820001042",
-      email: "smith@example.com",
-      createdAt: now()
-    }
-  ],
+  customers: [],
   orders: [],
   notifications: [],
   inventory: [
-    { id: "inv-shirt-black-m", sku: "TSHIRT-BLK-M", name: "Black T-Shirt Medium", tags: ["blank-shirt"], quantityOnHand: 42, reorderPoint: 10 },
-    { id: "inv-canvas-roll", sku: "CANVAS-ROLL", name: "Matte Canvas Roll", tags: ["canvas-roll"], quantityOnHand: 8, reorderPoint: 3 },
-    { id: "inv-gloss-paper", sku: "PAPER-A4-GLOSS", name: "A4 Gloss 250gsm", tags: ["paper-stock"], quantityOnHand: 1200, reorderPoint: 300 },
-    { id: "inv-banner-vinyl", sku: "VINYL-BANNER", name: "Outdoor Banner Vinyl", tags: ["banner-material", "vinyl-roll"], quantityOnHand: 15, reorderPoint: 4 }
+    { id: "inv-blank-tshirt", sku: "TSHIRT-BLANK", name: "Blank T-Shirts (assorted)", tags: ["blank-shirt"], quantityOnHand: 180, reorderPoint: 40 },
+    { id: "inv-blank-golf", sku: "GOLF-BLANK", name: "Blank Golf Shirts", tags: ["blank-golf-shirt"], quantityOnHand: 90, reorderPoint: 25 },
+    { id: "inv-blank-hoodie", sku: "HOODIE-BLANK", name: "Blank Hoodies / Sweaters", tags: ["blank-hoodie"], quantityOnHand: 60, reorderPoint: 15 },
+    { id: "inv-blank-jacket", sku: "JACKET-BLANK", name: "Blank Jackets", tags: ["blank-jacket"], quantityOnHand: 28, reorderPoint: 10 },
+    { id: "inv-blank-tracksuit", sku: "TRACKSUIT-BLANK", name: "Blank Tracksuits", tags: ["blank-tracksuit"], quantityOnHand: 22, reorderPoint: 8 },
+    { id: "inv-blank-kit", sku: "KIT-BLANK", name: "Sports Kit Blanks", tags: ["blank-kit"], quantityOnHand: 40, reorderPoint: 12 },
+    { id: "inv-blank-dress", sku: "DRESS-BLANK", name: "Dress Blanks", tags: ["blank-dress"], quantityOnHand: 18, reorderPoint: 6 },
+    { id: "inv-blank-hat", sku: "HAT-BUCKET", name: "Bucket Hats", tags: ["blank-hat"], quantityOnHand: 70, reorderPoint: 20 },
+    { id: "inv-sublimation-fabric", sku: "SUBLI-FABRIC", name: "Sublimation Fabric (rolls)", tags: ["sublimation-fabric", "fabric"], quantityOnHand: 65, reorderPoint: 20 },
+    { id: "inv-chiffon", sku: "CHIFFON", name: "Chiffon Fabric", tags: ["chiffon-fabric"], quantityOnHand: 30, reorderPoint: 10 },
+    { id: "inv-transfer-paper", sku: "TRANSFER-PAPER", name: "Transfer Paper", tags: ["transfer-paper"], quantityOnHand: 900, reorderPoint: 200 },
+    { id: "inv-sublimation-ink", sku: "SUBLI-INK", name: "Sublimation Ink (sets)", tags: ["ink"], quantityOnHand: 14, reorderPoint: 6 },
+    { id: "inv-thread", sku: "EMB-THREAD", name: "Embroidery Thread (cones)", tags: ["thread"], quantityOnHand: 120, reorderPoint: 30 },
+    { id: "inv-overalls", sku: "OVERALL-BLANK", name: "Blank Overalls", tags: ["blank-overall"], quantityOnHand: 24, reorderPoint: 8 },
+    { id: "inv-umbrella", sku: "UMBRELLA-BLANK", name: "Blank Umbrellas", tags: ["blank-umbrella"], quantityOnHand: 35, reorderPoint: 10 },
+    { id: "inv-table-cloth", sku: "TABLECLOTH-FABRIC", name: "Table Cloth Fabric", tags: ["table-cloth-fabric"], quantityOnHand: 26, reorderPoint: 8 },
+    { id: "inv-banner-material", sku: "BANNER-MAT", name: "Banner / Flag Material (rolls)", tags: ["banner-material", "flag-material", "fabric-print"], quantityOnHand: 19, reorderPoint: 6 },
+    { id: "inv-pullup-cassette", sku: "PULLUP-CASSETTE", name: "Pull-Up Cassettes", tags: ["pullup-cassette"], quantityOnHand: 12, reorderPoint: 5 },
+    { id: "inv-x-stand", sku: "X-STAND", name: "X-Banner Stands", tags: ["x-stand"], quantityOnHand: 9, reorderPoint: 4 },
+    { id: "inv-flag-pole", sku: "FLAG-POLE", name: "Flag Poles & Bases", tags: ["flag-pole"], quantityOnHand: 7, reorderPoint: 4 },
+    { id: "inv-popup-frame", sku: "POPUP-FRAME", name: "Pop-Up Wall Frames (3x3)", tags: ["popup-frame"], quantityOnHand: 1, reorderPoint: 2 },
+    { id: "inv-gazebo", sku: "GAZEBO-3X3", name: "Gazebo Frames & Canopies (3x3)", tags: ["gazebo-frame", "gazebo-canopy"], quantityOnHand: 3, reorderPoint: 2 },
+    { id: "inv-board-stock", sku: "BOARD-COREX", name: "Corex / Oval Board Stock", tags: ["board-stock"], quantityOnHand: 55, reorderPoint: 15 }
   ],
   catalog: catalog.map((product) => ({ ...product, enabled: product.enabled ?? true })),
   depositRules: defaultDepositRules,
@@ -821,21 +832,94 @@ function defaultPasswordHashFor(role: StaffMember["role"]): string | undefined {
   return undefined;
 }
 
+interface SeedStep {
+  assignee?: string;
+  deposit?: boolean;
+  payFull?: boolean;
+  method?: PaymentMethod;
+  artwork?: string;
+  rush?: boolean;
+  status?: OrderStatus;
+}
+
+function seedOrder(input: CreateOrderInput, step: SeedStep = {}): Order {
+  const order = createOrder({ ...input, rush: step.rush ?? input.rush });
+  if (step.assignee) updateOrder(order.id, { staffAssigneeId: step.assignee });
+  if (step.artwork) attachArtwork(order.id, { fileName: step.artwork, mimeType: "image/png", uploadedBy: "customer", widthPx: 3000, heightPx: 3000, dpi: 300 });
+  if (step.deposit && order.requiredDeposit > 0) recordPayment(order.id, step.method ?? "cash", order.requiredDeposit);
+  if (step.payFull && order.balanceDue > 0) recordPayment(order.id, step.method ?? "card_yoco", order.balanceDue);
+  if (step.status) transitionOrder(order.id, step.status);
+  return order;
+}
+
+// Seeds a realistic starting dataset so the platform isn't empty on first run.
 function seedStarterOrder() {
   if (state.orders.length > 0) return;
-  const order = createOrder({
-    source: "kiosk",
-    customer: { name: "Mrs. Smith", mobile: "+27820001042", email: "smith@example.com" },
-    items: [
-      {
-        productId: "canvas-framed",
-        quantity: 1,
-        selectedOptions: { size: "24x36", depth: "38mm", edge: "mirror", frame: "black" },
-        specialInstructions: "Family portrait. Customer may upload from home."
-      }
-    ]
+  const designer = "staff-designer";
+  const operator = "staff-operator";
+
+  // New online order, awaiting artwork (magic link sent).
+  seedOrder({
+    source: "online",
+    customer: { name: "Thabo Mokoena", mobile: "+27821112233", email: "thabo@example.co.za" },
+    items: [{ productId: "apparel-tshirt", quantity: 20, selectedOptions: { neck: "round", sleeve: "short", size: "L" } }]
   });
-  order.orderNumber = "#1042";
+
+  // School uniform bulk order, awaiting artwork.
+  seedOrder({
+    source: "online",
+    customer: { name: "Sunrise Primary School", mobile: "+27822223344", email: "admin@sunriseprimary.co.za" },
+    items: [{ productId: "apparel-school-uniform", quantity: 40, selectedOptions: { item: "shirt", size: "M" }, specialInstructions: "School crest on left chest." }]
+  });
+
+  // Golf shirts in design review, assigned to designer, artwork received.
+  seedOrder({
+    source: "counter",
+    customer: { name: "Apex Logistics", mobile: "+27823334455", email: "orders@apexlogistics.co.za" },
+    items: [{ productId: "apparel-golf-shirt", quantity: 15, selectedOptions: { sleeve: "short", size: "L" } }]
+  }, { assignee: designer, artwork: "apex-logo.png", deposit: true, method: "eft", status: "design_review" });
+
+  // Tracksuits approved for production, deposit paid.
+  seedOrder({
+    source: "online",
+    customer: { name: "Eagles Athletics Club", mobile: "+27824445566", email: "kit@eaglesac.co.za" },
+    items: [{ productId: "apparel-tracksuit", quantity: 10, selectedOptions: { size: "XL" } }]
+  }, { assignee: designer, artwork: "eagles-kit.png", deposit: true, status: "approved" });
+
+  // Sports kit in production, rush, assigned to operator.
+  seedOrder({
+    source: "counter",
+    customer: { name: "City Rovers FC", mobile: "+27825556677", email: "manager@cityrovers.co.za" },
+    items: [{ productId: "apparel-sports-kit", quantity: 18, selectedOptions: { sport: "soccer", size: "L" } }]
+  }, { assignee: operator, rush: true, artwork: "rovers-jersey.png", deposit: true, status: "in_production" });
+
+  // Hoodies in quality check.
+  seedOrder({
+    source: "counter",
+    customer: { name: "Tech Hub Co-Work", mobile: "+27826667788", email: "hello@techhub.co.za" },
+    items: [{ productId: "apparel-hoodie", quantity: 12, selectedOptions: { size: "XL" } }]
+  }, { assignee: operator, artwork: "techhub-logo.png", deposit: true, status: "quality_check" });
+
+  // Pull-up banner ready for collection, balance outstanding.
+  seedOrder({
+    source: "online",
+    customer: { name: "Bright Dental", mobile: "+27827778899", email: "info@brightdental.co.za" },
+    items: [{ productId: "signage-pull-up-banner", quantity: 2, selectedOptions: { material: "standard" } }]
+  }, { assignee: designer, artwork: "bright-dental.png", deposit: true, status: "ready_for_collection" });
+
+  // X-banner completed and fully paid.
+  seedOrder({
+    source: "counter",
+    customer: { name: "Green Valley Market", mobile: "+27828889900", email: "market@greenvalley.co.za" },
+    items: [{ productId: "signage-x-banner", quantity: 1, selectedOptions: {} }]
+  }, { assignee: designer, artwork: "green-valley.png", payFull: true, status: "completed" });
+
+  // Walk-in kiosk embroidery enquiry (priced on consultation) — sits in the counter queue.
+  seedOrder({
+    source: "kiosk",
+    customer: { name: "Walk-in Customer", mobile: "+27829990011" },
+    items: [{ productId: "apparel-embroidery", quantity: 25, selectedOptions: { placement: "left_chest" }, specialInstructions: "Company logo on golf shirts — needs a quote." }]
+  });
 }
 
 function createCounterQueueTicket(order: Order): CounterQueueTicket {

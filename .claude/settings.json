@@ -19,7 +19,8 @@
       "Bash(grep -niE \"outDir|rootDir\" tsconfig.base.json apps/api/tsconfig.json)",
       "Bash(grep -nE \"grid-template-columns: \\(repeat\\\\\\([3-9]|minmax|[0-9]+px\\)|width: [0-9]{3,}px|min-width: [0-9]{3,}px\" apps/web/app/styles.css)",
       "Bash(curl -s -o /dev/null -w \"/ -> %{http_code}\\\\n\" http://localhost:3000/)",
-      "Bash(curl -s http://localhost:3000/)"
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl -s http://localhost:4000/inventory)"
     ]
   }
 }

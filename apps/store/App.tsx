@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
 import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
@@ -23,6 +23,9 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>(storeData.orders);
   const [counterQueue, setCounterQueue] = useState<CounterQueueTicket[]>([]);
   const [loading, setLoading] = useState(false);
+  const { width } = useWindowDimensions();
+  // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
+  const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
   const tabs = staff ? tabsForRoles(staff.roles) : [];
 
   function logout() {
@@ -63,7 +66,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: sidePad }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.logo}>Finesse Staff</Text>
           <Text style={styles.subtle}>Embroidery · Heat Press · Garment Design</Text>
@@ -76,7 +79,7 @@ export default function App() {
         <View style={styles.loadingRow}><ActivityIndicator color="#c19a3e" /><Text style={styles.muted}>Loading…</Text></View>
       ) : null}
       {staff ? (
-        <View style={styles.tabs}>
+        <View style={[styles.tabs, { paddingHorizontal: sidePad }]}>
           {tabs.map((item) => (
             <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
               <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item.toUpperCase()}</Text>
@@ -85,7 +88,7 @@ export default function App() {
         </View>
       ) : null}
       <ScrollView
-        contentContainerStyle={styles.page}
+        contentContainerStyle={[styles.page, { paddingHorizontal: sidePad }]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refreshAll()} tintColor="#c19a3e" colors={["#c19a3e"]} />}
       >
         {!staff ? <MobileLogin onLogin={(nextStaff) => {

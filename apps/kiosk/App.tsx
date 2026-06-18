@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useKeepAwake } from "expo-keep-awake";
 import { calculateRequiredDeposit, priceQuote } from "@printflow/shared";
 import { kioskData } from "./src/demo";
@@ -27,6 +27,9 @@ export default function App() {
   const [lookupResult, setLookupResult] = useState("");
   const [creating, setCreating] = useState(false);
   const [checking, setChecking] = useState(false);
+  const { width } = useWindowDimensions();
+  // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
+  const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
   const selectedOptions = useMemo(() => Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])), [product]);
   const quote = useMemo(() => {
@@ -80,11 +83,11 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: sidePad }]}>
         <Text style={styles.logo}>Finesse Kiosk</Text>
         <Text style={styles.subtle}>Public customer entrance experience</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.page}>
+      <ScrollView contentContainerStyle={[styles.page, { paddingHorizontal: sidePad }]}>
         {step === "categories" ? (
           <View>
             <Text style={styles.eyebrow}>Welcome</Text>

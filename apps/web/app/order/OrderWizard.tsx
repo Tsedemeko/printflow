@@ -17,6 +17,8 @@ export function OrderWizard() {
   const [result, setResult] = useState<{ id: string; orderNumber: string; message: string } | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const product = products.find((item) => item.id === productId) ?? products[0] ?? catalog[0]!;
   const quoteInputs = useMemo(() => lines.filter((line) => line.quantity > 0).map((line) => ({ productId, quantity: line.quantity, selectedOptions: line.selectedOptions })), [lines, productId]);
   const quote = useMemo(() => priceQuote(quoteInputs, undefined, products), [quoteInputs, products]);
@@ -87,44 +89,56 @@ export function OrderWizard() {
   }
 
   async function createOrder(intent: "save" | "upload" | "payfast" | "yoco") {
-    const items = quoteInputs.map((item, index) => index === 0 && caption
-      ? { ...item, specialInstructions: `Design caption: ${caption}` }
-      : item);
-    const response = await fetch(`${apiUrl}/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: "online",
-        customer,
-        items
-      })
-    });
-    const payload = await response.json() as { order: { id: string; orderNumber: string } };
-    clearDraft();
-    if (intent === "yoco") {
-      const checkout = await fetch(`${apiUrl}/payments/yoco/checkout`, {
+    if (quoteInputs.length === 0) { setError("Add at least one quantity before creating the order."); return; }
+    setError("");
+    setSubmitting(intent);
+    try {
+      const items = quoteInputs.map((item, index) => index === 0 && caption
+        ? { ...item, specialInstructions: `Design caption: ${caption}` }
+        : item);
+      const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: payload.order.id })
+        body: JSON.stringify({ source: "online", customer, items })
       });
-      if (checkout.ok) {
-        const data = await checkout.json() as { redirectUrl?: string };
-        if (data.redirectUrl) { window.location.href = data.redirectUrl; return; }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Order could not be created (${response.status}). ${detail.slice(0, 140)}`);
       }
-    } else if (intent === "payfast") {
-      await fetch(`${apiUrl}/payments/payfast/checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: payload.order.id })
+      const payload = await response.json() as { order?: { id: string; orderNumber: string } };
+      if (!payload.order?.id) throw new Error("The server did not return an order. Please try again.");
+      clearDraft();
+
+      if (intent === "yoco") {
+        const checkout = await fetch(`${apiUrl}/payments/yoco/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: payload.order.id })
+        });
+        if (checkout.ok) {
+          const data = await checkout.json() as { redirectUrl?: string };
+          if (data.redirectUrl) { window.location.href = data.redirectUrl; return; }
+        }
+      } else if (intent === "payfast") {
+        await fetch(`${apiUrl}/payments/payfast/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: payload.order.id })
+        });
+      }
+
+      setResult({
+        id: payload.order.id,
+        orderNumber: payload.order.orderNumber,
+        message: intent === "payfast" ? "Order created and PayFast checkout prepared."
+          : intent === "yoco" ? "Order created. Yoco checkout could not start — use the artwork link or try again."
+          : intent === "upload" ? "Order created and secure artwork link is ready." : "Order created."
       });
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Could not reach the server. Please try again.");
+    } finally {
+      setSubmitting(null);
     }
-    setResult({
-      id: payload.order.id,
-      orderNumber: payload.order.orderNumber,
-      message: intent === "payfast" ? "Order created and PayFast checkout prepared."
-        : intent === "yoco" ? "Order created. Yoco checkout could not start — use the artwork link or try again."
-        : intent === "upload" ? "Order created and secure artwork link is ready." : "Order created."
-    });
   }
 
   return (
@@ -184,12 +198,14 @@ export function OrderWizard() {
             <p>Department queue: <strong>{product?.department.replaceAll("_", " ")}</strong></p>
             <p>Total: <strong>R{quote.total.toFixed(2)}</strong> | Required deposit: <strong>R{deposit.amount.toFixed(2)}</strong></p>
             <div className="row">
-              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0} onClick={() => void createOrder("save")} type="button">Create order</button>
-              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0} onClick={() => void createOrder("upload")} type="button" className="secondary">Create upload link</button>
-              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0} onClick={() => void createOrder("payfast")} type="button" className="secondary">Pay with PayFast</button>
-              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0} onClick={() => void createOrder("yoco")} type="button" className="secondary">Pay with Yoco</button>
+              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0 || !!submitting} onClick={() => void createOrder("save")} type="button">{submitting === "save" ? "Creating…" : "Create order"}</button>
+              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0 || !!submitting} onClick={() => void createOrder("upload")} type="button" className="secondary">{submitting === "upload" ? "Creating…" : "Create upload link"}</button>
+              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0 || !!submitting} onClick={() => void createOrder("payfast")} type="button" className="secondary">{submitting === "payfast" ? "Starting…" : "Pay with PayFast"}</button>
+              <button disabled={!customer.name || !customer.mobile || quoteInputs.length === 0 || !!submitting} onClick={() => void createOrder("yoco")} type="button" className="secondary">{submitting === "yoco" ? "Starting…" : "Pay with Yoco"}</button>
               <button onClick={saveDraft} type="button" className="secondary">{draftSaved ? "Draft saved ✓" : "Save draft"}</button>
             </div>
+            {!customer.name || !customer.mobile ? <p className="muted-note">Enter a customer name and mobile number to create the order.</p> : null}
+            {error ? <p className="form-error">{error}</p> : null}
             {result ? (
               <div className="quote-result">
                 <strong>{result.orderNumber}</strong>

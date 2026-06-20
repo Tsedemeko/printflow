@@ -340,10 +340,27 @@ function Orders({ orders, roster, onAdvance, onAssign, onRush }: {
   );
 }
 
+const PERIODS: [string, string][] = [["all", "All"], ["today", "Today"], ["7d", "7 days"], ["30d", "30 days"]];
+
 function Payments({ orders, metrics }: { orders: Order[]; metrics: Metrics | null }) {
-  const txns = orders
+  const [method, setMethod] = useState("all");
+  const [period, setPeriod] = useState("all");
+
+  const all = orders
     .flatMap((order) => order.payments.map((payment) => ({ ...payment, orderNumber: order.orderNumber, customer: order.customer.name })))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const methods = Array.from(new Set(all.map((txn) => txn.method)));
+  const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+  const cutoff = period === "today" ? startOfToday
+    : period === "7d" ? Date.now() - 7 * 86400000
+    : period === "30d" ? Date.now() - 30 * 86400000
+    : 0;
+
+  const txns = all.filter((txn) =>
+    (method === "all" || txn.method === method) &&
+    (period === "all" || new Date(txn.createdAt).getTime() >= cutoff)
+  );
   const collected = txns.reduce((sum, txn) => sum + txn.amount, 0);
 
   return (
@@ -357,10 +374,30 @@ function Payments({ orders, metrics }: { orders: Order[]; metrics: Metrics | nul
         <Kpi label="Outstanding" value={`R${(metrics?.outstandingBalances ?? 0).toLocaleString()}`} />
       </View>
 
+      <View style={styles.row}>
+        {PERIODS.map(([value, label]) => (
+          <Pressable key={value} style={[styles.chip, period === value && styles.chipActive]} onPress={() => setPeriod(value)}>
+            <Text style={styles.chipText}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {methods.length > 1 ? (
+        <View style={styles.row}>
+          <Pressable style={[styles.chip, method === "all" && styles.chipActive]} onPress={() => setMethod("all")}>
+            <Text style={styles.chipText}>All</Text>
+          </Pressable>
+          {methods.map((m) => (
+            <Pressable key={m} style={[styles.chip, method === m && styles.chipActive]} onPress={() => setMethod(m)}>
+              <Text style={styles.chipText}>{m.replace("_", " ")}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Recent transactions</Text>
-        {txns.length === 0 ? <Text style={styles.muted}>No payments recorded yet.</Text> : null}
-        {txns.slice(0, 40).map((txn) => (
+        <Text style={styles.panelTitle}>Transactions ({txns.length})</Text>
+        {txns.length === 0 ? <Text style={styles.muted}>No payments match these filters.</Text> : null}
+        {txns.slice(0, 60).map((txn) => (
           <View style={styles.rowBetween} key={txn.id}>
             <Text style={[styles.muted, styles.flex1]}>{new Date(txn.createdAt).toLocaleDateString("en-ZA")} · {txn.orderNumber} · {txn.method.replace("_", " ")}</Text>
             <Text style={styles.pill}>R{txn.amount.toFixed(2)}</Text>

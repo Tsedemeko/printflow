@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Finesse Staff",
-    "slug": "printflow-store",
+    "slug": "finesse-store",
+    "owner": "sethmaphosa",
     "version": "0.1.0",
     "platforms": [
       "ios",
@@ -29,6 +30,11 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "extra": {
+      "eas": {
+        "projectId": "0d54bc03-6d51-4a52-85dd-112dbbd2f82f"
+      }
+    },
     "web": {
       "bundler": "metro"
     },

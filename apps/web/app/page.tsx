@@ -24,12 +24,70 @@ const steps = [
   { n: "4", title: "Collect or get notified", text: "We message you the moment your order is ready for collection." }
 ];
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://finesse-web.vercel.app";
+
+// Local-business structured data (helps Google show the shops, addresses & phones in search/maps).
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "Finesse Fashion Design Enterprise",
+      url: SITE_URL,
+      logo: `${SITE_URL}/finesse-icon.png`,
+      description: "Sublimation, embroidery, heat press, and custom garment design.",
+      telephone: ["+27787273283", "+27727271087"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: "Finesse Fashion Design Enterprise",
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      inLanguage: "en-ZA"
+    },
+    {
+      "@type": "ClothingStore",
+      name: "Finesse Fashion Design — Johannesburg",
+      image: `${SITE_URL}/finesse-icon.png`,
+      url: SITE_URL,
+      telephone: "+27787273283",
+      priceRange: "RR",
+      parentOrganization: { "@id": `${SITE_URL}/#organization` },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Shop 12, 135 Pritchard Street",
+        addressLocality: "Johannesburg",
+        addressCountry: "ZA"
+      }
+    },
+    {
+      "@type": "ClothingStore",
+      name: "Finesse Fashion Design — Doornfontein",
+      image: `${SITE_URL}/finesse-icon.png`,
+      url: SITE_URL,
+      telephone: "+27727271087",
+      priceRange: "RR",
+      parentOrganization: { "@id": `${SITE_URL}/#organization` },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Shop 8, 17 Siemert Street",
+        addressLocality: "Doornfontein, Johannesburg",
+        addressCountry: "ZA"
+      }
+    }
+  ]
+};
+
 export default async function HomePage() {
   const products = await getCatalogProducts();
   const featured = products.filter((product) => product.enabled ?? true).slice(0, 6);
 
   return (
     <div className="site-bg">
+      {/* eslint-disable-next-line react/no-danger */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <header className="public-topbar site-topbar">
         <a className="brand" href="/">{/* eslint-disable-next-line @next/next/no-img-element */}<img className="brand-img" src="/finesse-logo.png" alt="Finesse Fashion Design" /></a>
         <nav className="nav">

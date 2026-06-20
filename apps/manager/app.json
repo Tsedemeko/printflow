@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Finesse Manager",
-    "slug": "finesse-manager",
+    "slug": "finess-manager",
+    "owner": "sethmaphosa",
     "version": "0.1.0",
     "platforms": [
       "ios",
@@ -29,6 +30,11 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "extra": {
+      "eas": {
+        "projectId": "ef0bd77e-97f7-4eb2-9f73-c221f083498c"
+      }
+    },
     "web": {
       "bundler": "metro"
     },

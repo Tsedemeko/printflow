@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { OrderWizard } from "./OrderWizard";
+
+export const metadata: Metadata = {
+  title: "Order Custom Apparel, Sublimation & Banners Online",
+  description:
+    "Order sublimation t-shirts, golf shirts, hoodies, tracksuits, sports kits, school uniforms, banners, and branding online from Finesse Fashion Design. Upload your artwork, preview pricing, and pay a deposit.",
+  alternates: { canonical: "/order" }
+};
 
 export default function OrderPage() {
   return (

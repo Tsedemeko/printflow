@@ -26,7 +26,8 @@ export function KioskFlow() {
   const [lookup, setLookup] = useState("");
   const [lookupResult, setLookupResult] = useState("");
   const product = products.find((item) => item.id === productId) ?? products[0] ?? catalog[0]!;
-  const selectedOptions = useMemo(() => firstOptions(product), [product]);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => firstOptions(product));
+  useEffect(() => { setSelectedOptions(firstOptions(product)); }, [product.id]);
   const quote = useMemo(() => priceQuote([{ productId: product.id, quantity, selectedOptions }], undefined, products), [product.id, products, quantity, selectedOptions]);
   const deposit = calculateRequiredDeposit(quote.total, quote.items);
 
@@ -104,11 +105,24 @@ export function KioskFlow() {
             </div>
             <div>
               <p>{product.description}</p>
-              <div className="catalog-subitems">
-                {Object.entries(product.options).flatMap(([group, options]) => options.slice(0, 4).map((option) => (
-                  <span className="badge" key={`${group}-${option.id}`}>{option.label}</span>
-                )))}
-              </div>
+              {Object.keys(product.options).length === 0 ? <p className="muted-note">No options to choose for this product.</p> : null}
+              {Object.entries(product.options).map(([group, options]) => (
+                <div className="option-group" key={group}>
+                  <span className="option-label">{group.replaceAll("_", " ")}</span>
+                  <div className="option-row">
+                    {options.map((option) => (
+                      <button
+                        type="button"
+                        key={option.id}
+                        className={`option-pill${selectedOptions[group] === option.id ? " selected" : ""}`}
+                        onClick={() => setSelectedOptions((prev) => ({ ...prev, [group]: option.id }))}
+                      >
+                        {option.label}{option.priceDelta ? ` (+R${option.priceDelta})` : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
               <label>Quantity<input min={1} type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
               <p>Total: <strong>R{quote.total.toFixed(2)}</strong> | Deposit: <strong>R{deposit.amount.toFixed(2)}</strong></p>
               <button onClick={() => setStep("customer")} type="button">Continue</button>

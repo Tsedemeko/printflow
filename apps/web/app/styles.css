@@ -1512,3 +1512,10 @@ img, svg, video, canvas { max-width: 100%; height: auto; }
   animation: finesse-spin 0.7s linear infinite;
 }
 @keyframes finesse-spin { to { transform: rotate(360deg); } }
+
+/* Kiosk selectable options */
+.option-group { margin: 10px 0; }
+.option-label { color: var(--muted); display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; margin-bottom: 6px; }
+.option-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.option-pill { background: #f3ecd9; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); cursor: pointer; font-weight: 700; min-height: 40px; padding: 8px 14px; }
+.option-pill.selected { background: var(--navy); border-color: var(--navy); color: #ffffff; }

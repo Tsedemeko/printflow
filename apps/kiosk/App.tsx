@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useKeepAwake } from "expo-keep-awake";
+import * as SplashScreen from "expo-splash-screen";
 import { calculateRequiredDeposit, priceQuote } from "@printflow/shared";
 import { kioskData } from "./src/demo";
+
+// Keep the native splash visible until the first screen has painted (no white flash).
+void SplashScreen.preventAutoHideAsync();
 
 type KioskStep = "categories" | "products" | "customize" | "customer" | "ticket" | "collect";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
@@ -30,6 +34,8 @@ export default function App() {
   const { width } = useWindowDimensions();
   // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
   const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
+
+  useEffect(() => { void SplashScreen.hideAsync(); }, []);
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
   const selectedOptions = useMemo(() => Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])), [product]);
   const quote = useMemo(() => {

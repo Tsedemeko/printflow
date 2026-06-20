@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
 import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
+
+// Keep the native splash visible until the first screen has painted (no white flash).
+void SplashScreen.preventAutoHideAsync();
 
 type Tab = "mywork" | "counter" | "jobs" | "pos" | "shop";
 type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
@@ -27,6 +31,8 @@ export default function App() {
   // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
   const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
   const tabs = staff ? tabsForRoles(staff.roles) : [];
+
+  useEffect(() => { void SplashScreen.hideAsync(); }, []);
 
   function logout() {
     staffAccessToken = "";

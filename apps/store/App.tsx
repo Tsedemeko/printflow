@@ -243,14 +243,6 @@ function Counter({ orders, tickets, staffName, onRefresh }: { orders: Order[]; t
       </View>
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Pre-order {order?.orderNumber ?? "#1042"}</Text>
-        <Text style={styles.muted}>Kiosk selections loaded. Consultant confirms customer, artwork, pricing, deposit, and approval.</Text>
-        <View style={styles.mockup}>
-          <View style={styles.canvasPreview} />
-          <View style={styles.previewRail}>
-            <Text style={styles.tileTitle}>Live mockup</Text>
-            <Text style={styles.muted}>Preflight warning appears if resolution is too low for selected print size.</Text>
-          </View>
-        </View>
         <Text style={styles.total}>Total R{quote.total.toFixed(2)} | Deposit R{deposit.amount.toFixed(2)}</Text>
         <View style={styles.row}>
           <Pressable style={styles.button} onPress={() => void approve()}><Text style={styles.buttonText}>Customer Approved</Text></Pressable>
@@ -345,8 +337,10 @@ function MyWork({ orders, staff, onRefresh }: { orders: Order[]; staff: Staff; o
 }
 
 function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<void> }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const statuses = storeData.workflowColumns.map((column) => column.status);
+
   async function move(order: Order) {
-    const statuses = storeData.workflowColumns.map((column) => column.status);
     const nextStatus = statuses[statuses.indexOf(order.status) + 1];
     if (!nextStatus) return;
     await fetch(`${apiUrl}/orders/${order.id}/status`, {
@@ -365,15 +359,23 @@ function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise
         const columnOrders = orders.filter((order) => order.status === column.status);
         return (
           <View style={styles.panel} key={column.status}>
-            <Text style={styles.panelTitle}>{column.label}</Text>
+            <Text style={styles.panelTitle}>{column.label} ({columnOrders.length})</Text>
             {columnOrders.length === 0 ? <Text style={styles.muted}>No jobs in this stage.</Text> : null}
-            {columnOrders.map((order) => (
-              <View style={styles.job} key={order.id}>
-                <Text style={styles.tileTitle}>{order.orderNumber}</Text>
-                <Text style={styles.muted}>{order.queueName.replace("_", " ")} | Balance R{order.balanceDue.toFixed(2)}</Text>
-                <Pressable style={styles.secondaryButton} onPress={() => void move(order)}><Text style={styles.secondaryButtonText}>Move next</Text></Pressable>
-              </View>
-            ))}
+            {columnOrders.map((order) => {
+              const isOpen = open === order.id;
+              const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+              return (
+                <View style={styles.job} key={order.id}>
+                  <Pressable onPress={() => setOpen(isOpen ? null : order.id)}>
+                    <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+                    <Text style={styles.muted}>{order.queueName.replace("_", " ")} | Balance R{order.balanceDue.toFixed(2)}</Text>
+                  </Pressable>
+                  {isOpen && nextStatus ? (
+                    <Pressable style={styles.secondaryButton} onPress={() => void move(order)}><Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text></Pressable>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         );
       })}
@@ -387,6 +389,7 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
   const [search, setSearch] = useState("");
   const [selectedItem, setSelectedItem] = useState<{ id: string; sku: string; name: string; quantityOnHand: number } | null>(null);
   const [message, setMessage] = useState("");
+  const [showQuick, setShowQuick] = useState(false);
   const filteredInventory = inventory.filter((item) => `${item.sku} ${item.name}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
 
   useEffect(() => {
@@ -464,16 +467,20 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
           </Pressable>
         ) : null}
       </View>
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Quick sale</Text>
-        <TextInput style={styles.input} value={search} onChangeText={(value) => { setSearch(value); setSelectedItem(null); }} placeholder="Search ready-made frame, stationery, stock item" />
-        {filteredInventory.map((item) => (
-          <Pressable style={styles.secondaryButton} key={item.id} onPress={() => { setSelectedItem(item); setSearch(item.name); }}>
-            <Text style={styles.secondaryButtonText}>{item.sku} - {item.name} - {item.quantityOnHand} left</Text>
-          </Pressable>
-        ))}
-        <Pressable style={styles.button} onPress={() => void quickSale()}><Text style={styles.buttonText}>Create quick sale</Text></Pressable>
-      </View>
+      <Pressable style={styles.secondaryButton} onPress={() => setShowQuick((value) => !value)}>
+        <Text style={styles.secondaryButtonText}>{showQuick ? "Close quick sale" : "Quick sale"}</Text>
+      </Pressable>
+      {showQuick ? (
+        <View style={styles.panel}>
+          <TextInput style={styles.input} value={search} onChangeText={(value) => { setSearch(value); setSelectedItem(null); }} placeholder="Search ready-made stock item" />
+          {filteredInventory.map((item) => (
+            <Pressable style={styles.secondaryButton} key={item.id} onPress={() => { setSelectedItem(item); setSearch(item.name); }}>
+              <Text style={styles.secondaryButtonText}>{item.sku} - {item.name} - {item.quantityOnHand} left</Text>
+            </Pressable>
+          ))}
+          <Pressable style={styles.button} onPress={() => void quickSale()}><Text style={styles.buttonText}>Create quick sale</Text></Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -37,7 +37,11 @@ export default function App() {
 
   useEffect(() => { void SplashScreen.hideAsync(); }, []);
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
-  const selectedOptions = useMemo(() => Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])), [product]);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  // Reset selections to each product's defaults when the product changes.
+  useEffect(() => {
+    setSelectedOptions(Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])));
+  }, [product.id]);
   const quote = useMemo(() => {
     return priceQuote([{ productId: product.id, quantity: 1, selectedOptions }]);
   }, [product, selectedOptions]);
@@ -87,11 +91,25 @@ export default function App() {
     }
   }
 
+  function goBack() {
+    if (step === "products") setStep("categories");
+    else if (step === "customize") setStep("products");
+    else if (step === "customer") setStep("customize");
+    else setStep("categories");
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={[styles.header, { paddingHorizontal: sidePad }]}>
-        <Text style={styles.logo}>Finesse Kiosk</Text>
-        <Text style={styles.subtle}>Public customer entrance experience</Text>
+        <View style={styles.headerRow}>
+          {step !== "categories" ? (
+            <Pressable style={styles.backBtn} onPress={goBack}><Text style={styles.backBtnText}>‹ Back</Text></Pressable>
+          ) : null}
+          <View style={styles.flex1}>
+            <Text style={styles.logo}>Finesse Kiosk</Text>
+            <Text style={styles.subtle}>Public customer entrance experience</Text>
+          </View>
+        </View>
       </View>
       <ScrollView contentContainerStyle={[styles.page, { paddingHorizontal: sidePad }]}>
         {step === "categories" ? (
@@ -141,7 +159,6 @@ export default function App() {
                 </Pressable>
               ))}
             </View>
-            <Pressable style={styles.secondaryButton} onPress={() => setStep("categories")}><Text style={styles.secondaryButtonText}>Back to categories</Text></Pressable>
           </View>
         ) : null}
 
@@ -150,23 +167,28 @@ export default function App() {
             <Text style={styles.eyebrow}>Guided customization</Text>
             <Text style={styles.title}>{product.name}</Text>
             <View style={styles.panel}>
+              {Object.keys(product.options).length === 0 ? <Text style={styles.muted}>No options to choose — continue to the next step.</Text> : null}
               {Object.entries(product.options).map(([group, options]) => (
                 <View key={group} style={styles.optionBlock}>
                   <Text style={styles.panelTitle}>{group.replace("_", " ")}</Text>
                   <View style={styles.row}>
-                    {options.map((option) => (
-                      <View style={styles.optionPill} key={option.id}>
-                        <Text style={styles.optionText}>{option.label}</Text>
-                      </View>
-                    ))}
+                    {options.map((option) => {
+                      const selected = selectedOptions[group] === option.id;
+                      return (
+                        <Pressable
+                          key={option.id}
+                          style={[styles.optionPill, selected && styles.optionPillActive]}
+                          onPress={() => setSelectedOptions((prev) => ({ ...prev, [group]: option.id }))}
+                        >
+                          <Text style={[styles.optionText, selected && styles.optionTextActive]}>{option.label}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               ))}
               <Text style={styles.total}>Estimate R{quote.total.toFixed(2)} | Deposit R{deposit.amount.toFixed(2)}</Text>
-              <View style={styles.row}>
-                <Pressable style={styles.secondaryButton} onPress={() => setStep("products")}><Text style={styles.secondaryButtonText}>Back</Text></Pressable>
-                <Pressable style={styles.button} onPress={() => setStep("customer")}><Text style={styles.buttonText}>Continue</Text></Pressable>
-              </View>
+              <Pressable style={styles.button} onPress={() => setStep("customer")}><Text style={styles.buttonText}>Continue</Text></Pressable>
             </View>
           </View>
         ) : null}
@@ -209,12 +231,9 @@ export default function App() {
                 <Text style={styles.panelTitle}>Order lookup</Text>
                 <Text style={styles.muted}>{lookupResult || "Enter a reference and tap Check status."}</Text>
               </View>
-              <View style={styles.row}>
-                <Pressable style={styles.secondaryButton} onPress={() => setStep("categories")}><Text style={styles.secondaryButtonText}>Back</Text></Pressable>
-                <Pressable style={[styles.button, checking && styles.buttonDisabled]} disabled={checking} onPress={() => void lookupOrder()}>
-                  {checking ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Check status</Text>}
-                </Pressable>
-              </View>
+              <Pressable style={[styles.button, checking && styles.buttonDisabled]} disabled={checking} onPress={() => void lookupOrder()}>
+                {checking ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Check status</Text>}
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -226,6 +245,10 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#eef2f8" },
   header: { backgroundColor: "#ffffff", borderBottomColor: "#d6deea", borderBottomWidth: 1, padding: 18 },
+  headerRow: { alignItems: "center", flexDirection: "row", gap: 12 },
+  flex1: { flex: 1 },
+  backBtn: { borderColor: "#0f1f3d", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  backBtnText: { color: "#0f1f3d", fontWeight: "800" },
   logo: { color: "#0f1f3d", fontSize: 26, fontWeight: "900" },
   subtle: { color: "#5b6b86", marginTop: 4 },
   page: { gap: 16, padding: 18 },
@@ -240,7 +263,9 @@ const styles = StyleSheet.create({
   panelTitle: { color: "#0f1f3d", fontSize: 18, fontWeight: "900" },
   optionBlock: { marginBottom: 14 },
   optionPill: { backgroundColor: "#f3ecd9", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  optionPillActive: { backgroundColor: "#c19a3e", borderColor: "#c19a3e" },
   optionText: { color: "#0f1f3d", fontWeight: "800" },
+  optionTextActive: { color: "#ffffff" },
   total: { color: "#0f1f3d", fontSize: 18, fontWeight: "900", marginTop: 12 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   button: { alignItems: "center", backgroundColor: "#0f1f3d", borderRadius: 8, minHeight: 44, justifyContent: "center", paddingHorizontal: 14, paddingVertical: 12 },

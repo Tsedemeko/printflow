@@ -54,7 +54,11 @@ export function KioskCategoriesManager({ initialCategories }: { initialCategorie
 
       {rows.map((row, index) => (
         <div className="kioskcat-row" key={index}>
-          <input value={row.id} onChange={(event) => update(index, "id", event.target.value)} placeholder="id (e.g. apparel)" />
+          <select value={row.id} onChange={(event) => update(index, "id", event.target.value)}>
+            <option value="" disabled>Select category…</option>
+            {KNOWN_IDS.map((id) => <option key={id} value={id}>{id.replaceAll("_", " ")}</option>)}
+            {row.id && !KNOWN_IDS.includes(row.id) ? <option value={row.id}>{row.id}</option> : null}
+          </select>
           <input value={row.label} onChange={(event) => update(index, "label", event.target.value)} placeholder="Label" />
           <input value={row.description} onChange={(event) => update(index, "description", event.target.value)} placeholder="Description" />
           <div className="row">

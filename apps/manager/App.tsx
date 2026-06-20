@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
-import { statusLabel } from "@printflow/shared";
+import { statusLabel, workflowColumns } from "@printflow/shared";
 import type { Order, StaffRole } from "@printflow/shared";
 
 // Keep the native splash visible until the first screen has painted (no white flash).
 void SplashScreen.preventAutoHideAsync();
 
-type Tab = "overview" | "team" | "stock";
+type Tab = "overview" | "orders" | "payments" | "team" | "stock";
 type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
 type RosterMember = { id: string; name: string; role: string; roles: string[] };
 type InventoryItem = { id: string; sku: string; name: string; quantityOnHand: number; reorderPoint: number };
@@ -20,16 +20,8 @@ type Metrics = { totalSales: number; activeOrders: number; averageOrderValue: nu
 type BoardColumn = { status: string; label: string; orders: Order[] };
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
-const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "https://finesse-web.vercel.app";
 const ACTIVE = ["new", "awaiting_artwork", "design_review", "approved", "in_production", "quality_check"];
 let accessToken = "";
-
-async function shareInvoice(order: Order) {
-  await Share.share({
-    title: `Invoice ${order.orderNumber}`,
-    message: `Invoice ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/invoice/${order.id}`
-  });
-}
 
 function headers(roles: StaffRole[], json = true): Record<string, string> {
   const base: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
@@ -95,6 +87,46 @@ export default function App() {
     await refresh();
   }
 
+  async function advance(orderId: string, status: string) {
+    await fetch(`${apiUrl}/orders/${orderId}/status`, {
+      method: "POST",
+      headers: headers(["manager"]),
+      body: JSON.stringify({ status })
+    });
+    await refresh();
+  }
+
+  async function setRush(orderId: string, rush: boolean) {
+    await fetch(`${apiUrl}/orders/${orderId}`, {
+      method: "PATCH",
+      headers: headers(["manager"]),
+      body: JSON.stringify({ rush })
+    });
+    await refresh();
+  }
+
+  async function addStaff(input: { name: string; email: string; role: string; password: string }): Promise<string> {
+    const res = await fetch(`${apiUrl}/admin/staff`, {
+      method: "POST",
+      headers: headers(["owner"]),
+      body: JSON.stringify({ name: input.name, email: input.email, role: input.role, temporaryPassword: input.password })
+    });
+    if (!res.ok) {
+      return res.status === 403 ? "Only an owner can add team members." : "Could not add member (check the details).";
+    }
+    await refresh();
+    return "";
+  }
+
+  async function deactivateStaff(id: string): Promise<void> {
+    await fetch(`${apiUrl}/admin/staff/${id}`, {
+      method: "PATCH",
+      headers: headers(["owner"]),
+      body: JSON.stringify({ active: false })
+    });
+    await refresh();
+  }
+
   async function moveStock(itemId: string, kind: "receive" | "issue", quantity: number) {
     if (!quantity || quantity <= 0) return;
     await fetch(`${apiUrl}/inventory/${itemId}/${kind}`, {
@@ -121,7 +153,7 @@ export default function App() {
       ) : null}
       {staff ? (
         <View style={[styles.tabs, { paddingHorizontal: sidePad }]}>
-          {(["overview", "team", "stock"] as Tab[]).map((item) => (
+          {(["overview", "orders", "payments", "team", "stock"] as Tab[]).map((item) => (
             <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
               <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item.toUpperCase()}</Text>
             </Pressable>
@@ -135,7 +167,9 @@ export default function App() {
       >
         {!staff ? <Login onLogin={(next) => { accessToken = next.token ?? ""; setStaff(next); }} /> : null}
         {staff && tab === "overview" ? <Overview orders={orders} metrics={metrics} board={board} inventory={inventory} /> : null}
-        {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAssign={assign} /> : null}
+        {staff && tab === "orders" ? <Orders orders={orders} roster={roster} onAdvance={advance} onAssign={assign} onRush={setRush} /> : null}
+        {staff && tab === "payments" ? <Payments orders={orders} metrics={metrics} /> : null}
+        {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAdd={addStaff} onDeactivate={deactivateStaff} /> : null}
         {staff && tab === "stock" ? <Stock inventory={inventory} movements={movements} onMove={moveStock} /> : null}
       </ScrollView>
     </SafeAreaView>
@@ -147,10 +181,6 @@ function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const presets: { label: string; name: string; roles: StaffRole[] }[] = [
-    { label: "Owner", name: "Finesse Owner", roles: ["owner"] },
-    { label: "Manager", name: "Shop Manager", roles: ["manager"] }
-  ];
 
   async function signIn() {
     setMessage("");
@@ -187,15 +217,6 @@ function Login({ onLogin }: { onLogin: (staff: Staff) => void }) {
         <Pressable style={[styles.button, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void signIn()}>
           {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
         </Pressable>
-        <Text style={styles.muted}>Local development shortcuts</Text>
-        <View style={styles.grid}>
-          {presets.map((preset) => (
-            <Pressable style={styles.tile} key={preset.label} onPress={() => onLogin({ name: preset.name, roles: preset.roles })}>
-              <Text style={styles.tileTitle}>{preset.label}</Text>
-              <Text style={styles.muted}>{preset.roles.join(", ")}</Text>
-            </Pressable>
-          ))}
-        </View>
       </View>
     </View>
   );
@@ -265,72 +286,171 @@ function Overview({ orders, metrics, board, inventory }: { orders: Order[]; metr
   );
 }
 
-function Team({ orders, roster, error, onAssign }: { orders: Order[]; roster: RosterMember[]; error: string; onAssign: (orderId: string, staffId: string) => Promise<void> }) {
+function Orders({ orders, roster, onAdvance, onAssign, onRush }: {
+  orders: Order[];
+  roster: RosterMember[];
+  onAdvance: (orderId: string, status: string) => Promise<void>;
+  onAssign: (orderId: string, staffId: string) => Promise<void>;
+  onRush: (orderId: string, rush: boolean) => Promise<void>;
+}) {
+  const [assigning, setAssigning] = useState<string | null>(null);
   const done = ["completed", "cancelled"];
   const active = orders.filter((order) => !done.includes(order.status));
-  const unassigned = active.filter((order) => !order.staffAssigneeId);
+  const nameFor = (id?: string) => roster.find((member) => member.id === id)?.name ?? "Unassigned";
+  const nextStatus = (status: string) => {
+    const index = workflowColumns.findIndex((column) => column.status === status);
+    return workflowColumns[index + 1]?.status;
+  };
 
   return (
     <View>
-      <Text style={styles.eyebrow}>Manager &amp; supervisor</Text>
-      <Text style={styles.title}>Team workload</Text>
-      {error ? <Text style={styles.warning}>{error}</Text> : null}
+      <Text style={styles.eyebrow}>Manage</Text>
+      <Text style={styles.title}>Orders &amp; jobs</Text>
+      {active.length === 0 ? <Text style={styles.muted}>No active orders.</Text> : null}
+      {active.map((order) => {
+        const ns = nextStatus(order.status);
+        return (
+          <View style={styles.panel} key={order.id}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.panelTitle}>{order.orderNumber}{order.rush ? "  ⚡" : ""}</Text>
+              <Text style={styles.pill}>{statusLabel(order.status)}</Text>
+            </View>
+            <Text style={styles.muted}>{order.customer.name} · Balance R{order.balanceDue.toFixed(2)}</Text>
+            <Text style={styles.muted}>Assigned: {nameFor(order.staffAssigneeId)}</Text>
 
-      <View style={styles.kpiRow}>
-        <Kpi label="Team" value={String(roster.length)} />
-        <Kpi label="Active jobs" value={String(active.length)} />
-        <Kpi label="Unassigned" value={String(unassigned.length)} />
-        <Kpi label="Completed" value={String(orders.filter((order) => order.status === "completed").length)} />
-      </View>
+            <View style={styles.row}>
+              {ns ? <Pressable style={styles.button} onPress={() => void onAdvance(order.id, ns)}><Text style={styles.buttonText}>Move to {statusLabel(ns)}</Text></Pressable> : null}
+              <Pressable style={styles.shareBtn} onPress={() => setAssigning(assigning === order.id ? null : order.id)}><Text style={styles.chipText}>Assign</Text></Pressable>
+              <Pressable style={styles.shareBtn} onPress={() => void onRush(order.id, !order.rush)}><Text style={styles.chipText}>{order.rush ? "Unrush" : "Rush"}</Text></Pressable>
+            </View>
 
-      {unassigned.length > 0 ? (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Unassigned jobs ({unassigned.length})</Text>
-          <Text style={styles.muted}>Tap a team member to assign.</Text>
-          {unassigned.map((order) => (
-            <View style={styles.job} key={order.id}>
-              <Text style={styles.tileTitle}>{order.orderNumber} · {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
-              <Text style={styles.muted}>{statusLabel(order.status)}</Text>
+            {assigning === order.id && roster.length ? (
               <View style={styles.row}>
                 {roster.map((member) => (
-                  <Pressable style={styles.chip} key={member.id} onPress={() => void onAssign(order.id, member.id)}>
+                  <Pressable style={styles.chip} key={member.id} onPress={() => { setAssigning(null); void onAssign(order.id, member.id); }}>
                     <Text style={styles.chipText}>{member.name}</Text>
                   </Pressable>
                 ))}
               </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {roster.map((member) => {
-        const jobs = active.filter((order) => order.staffAssigneeId === member.id);
-        const completed = orders.filter((order) => order.staffAssigneeId === member.id && order.status === "completed").length;
-        const rush = jobs.filter((order) => order.rush).length;
-        return (
-          <View style={styles.panel} key={member.id}>
-            <Text style={styles.panelTitle}>{member.name} <Text style={styles.role}>· {member.role.replace("_", " ")}</Text></Text>
-            <Text style={styles.muted}>{jobs.length} active · {rush} rush · {completed} done</Text>
-            {jobs.length === 0 ? <Text style={styles.muted}>No active jobs.</Text> : null}
-            {jobs.map((order) => (
-              <View style={styles.job} key={order.id}>
-                <Text style={styles.tileTitle}>{order.orderNumber} · {order.customer.name}</Text>
-                <Text style={styles.muted}>{statusLabel(order.status)}{order.activityLog[0] ? ` · ${order.activityLog[0].message}` : ""}</Text>
-                <Pressable style={styles.shareBtn} onPress={() => void shareInvoice(order)}>
-                  <Text style={styles.chipText}>Share invoice</Text>
-                </Pressable>
-              </View>
-            ))}
+            ) : null}
           </View>
         );
       })}
-      {roster.length === 0 && !error ? <Text style={styles.muted}>No active staff found.</Text> : null}
+    </View>
+  );
+}
+
+function Payments({ orders, metrics }: { orders: Order[]; metrics: Metrics | null }) {
+  const txns = orders
+    .flatMap((order) => order.payments.map((payment) => ({ ...payment, orderNumber: order.orderNumber, customer: order.customer.name })))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const collected = txns.reduce((sum, txn) => sum + txn.amount, 0);
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Money</Text>
+      <Text style={styles.title}>Payments &amp; transactions</Text>
+
+      <View style={styles.kpiRow}>
+        <Kpi label="Collected" value={`R${collected.toLocaleString()}`} />
+        <Kpi label="Transactions" value={String(txns.length)} />
+        <Kpi label="Outstanding" value={`R${(metrics?.outstandingBalances ?? 0).toLocaleString()}`} />
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Recent transactions</Text>
+        {txns.length === 0 ? <Text style={styles.muted}>No payments recorded yet.</Text> : null}
+        {txns.slice(0, 40).map((txn) => (
+          <View style={styles.rowBetween} key={txn.id}>
+            <Text style={styles.muted}>{new Date(txn.createdAt).toLocaleDateString("en-ZA")} · {txn.orderNumber} · {txn.method.replace("_", " ")}</Text>
+            <Text style={styles.pill}>R{txn.amount.toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const ROLE_OPTIONS = ["owner", "manager", "cashier", "designer", "apparel_operator"];
+
+function Team({ orders, roster, error, onAdd, onDeactivate }: {
+  orders: Order[];
+  roster: RosterMember[];
+  error: string;
+  onAdd: (input: { name: string; email: string; role: string; password: string }) => Promise<string>;
+  onDeactivate: (id: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("designer");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
+  const jobsFor = (id: string) => active.filter((order) => order.staffAssigneeId === id).length;
+
+  async function submit() {
+    if (!name || !email || !password) { setMsg("Name, email and a temporary password are required."); return; }
+    setBusy(true);
+    const err = await onAdd({ name, email, role, password });
+    setBusy(false);
+    if (err) { setMsg(err); return; }
+    setMsg(""); setName(""); setEmail(""); setPassword("");
+  }
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Manager</Text>
+      <Text style={styles.title}>Team</Text>
+      {error ? <Text style={styles.warning}>{error}</Text> : null}
+
+      <View style={styles.kpiRow}>
+        <Kpi label="Members" value={String(roster.length)} />
+        <Kpi label="Active jobs" value={String(active.length)} />
+      </View>
+
+      <Pressable style={styles.button} onPress={() => setShowAdd((value) => !value)}>
+        <Text style={styles.buttonText}>{showAdd ? "Close" : "+ Add team member"}</Text>
+      </Pressable>
+
+      {showAdd ? (
+        <View style={styles.panel}>
+          <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
+          <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+          <TextInput style={styles.input} placeholder="Temporary password" secureTextEntry value={password} onChangeText={setPassword} />
+          <View style={styles.row}>
+            {ROLE_OPTIONS.map((option) => (
+              <Pressable key={option} style={[styles.chip, role === option && styles.chipActive]} onPress={() => setRole(option)}>
+                <Text style={styles.chipText}>{option.replace("_", " ")}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {msg ? <Text style={styles.warning}>{msg}</Text> : null}
+          <Pressable style={[styles.button, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void submit()}>
+            {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Add member</Text>}
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Team members</Text>
+        {roster.length === 0 ? <Text style={styles.muted}>No active staff.</Text> : null}
+        {roster.map((member) => (
+          <View style={styles.rowBetween} key={member.id}>
+            <Text style={styles.muted}>{member.name} · {member.role.replace("_", " ")} · {jobsFor(member.id)} active</Text>
+            <Pressable style={styles.shareBtn} onPress={() => void onDeactivate(member.id)}><Text style={styles.chipText}>Deactivate</Text></Pressable>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
 function Stock({ inventory, movements, onMove }: { inventory: InventoryItem[]; movements: StockMovement[]; onMove: (itemId: string, kind: "receive" | "issue", quantity: number) => Promise<void> }) {
   const [qty, setQty] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState<string | null>(null);
   const lowCount = inventory.filter((item) => item.quantityOnHand <= item.reorderPoint).length;
 
   function submit(itemId: string, kind: "receive" | "issue") {
@@ -351,21 +471,31 @@ function Stock({ inventory, movements, onMove }: { inventory: InventoryItem[]; m
 
       {inventory.map((item) => {
         const low = item.quantityOnHand <= item.reorderPoint;
+        const isOpen = open === item.id;
         return (
           <View style={styles.panel} key={item.id}>
-            <Text style={styles.panelTitle}>{item.name} {low ? <Text style={styles.role}>· LOW</Text> : null}</Text>
-            <Text style={styles.muted}>{item.sku} · On hand {item.quantityOnHand} · Reorder at {item.reorderPoint}</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="number-pad"
-              placeholder="Quantity"
-              value={qty[item.id] ?? ""}
-              onChangeText={(value) => setQty((prev) => ({ ...prev, [item.id]: value }))}
-            />
-            <View style={styles.row}>
-              <Pressable style={styles.button} onPress={() => submit(item.id, "receive")}><Text style={styles.buttonText}>Stock in</Text></Pressable>
-              <Pressable style={styles.shareBtn} onPress={() => submit(item.id, "issue")}><Text style={styles.chipText}>Stock out</Text></Pressable>
-            </View>
+            <Pressable onPress={() => setOpen(isOpen ? null : item.id)}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.panelTitle}>{item.name}{low ? <Text style={styles.role}> · LOW</Text> : null}</Text>
+                <Text style={styles.pill}>{item.quantityOnHand}</Text>
+              </View>
+            </Pressable>
+            {isOpen ? (
+              <>
+                <Text style={styles.muted}>{item.sku} · Reorder at {item.reorderPoint}</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="number-pad"
+                  placeholder="Quantity"
+                  value={qty[item.id] ?? ""}
+                  onChangeText={(value) => setQty((prev) => ({ ...prev, [item.id]: value }))}
+                />
+                <View style={styles.row}>
+                  <Pressable style={styles.button} onPress={() => submit(item.id, "receive")}><Text style={styles.buttonText}>Stock in</Text></Pressable>
+                  <Pressable style={styles.shareBtn} onPress={() => submit(item.id, "issue")}><Text style={styles.chipText}>Stock out</Text></Pressable>
+                </View>
+              </>
+            ) : null}
           </View>
         );
       })}
@@ -426,6 +556,7 @@ const styles = StyleSheet.create({
   job: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 12 },
   pill: { backgroundColor: "#f3ecd9", borderRadius: 999, color: "#0f1f3d", fontWeight: "700", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 4 },
   chip: { backgroundColor: "#0f1f3d", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  chipActive: { backgroundColor: "#c19a3e" },
   chipText: { color: "#ffffff", fontWeight: "700" },
   shareBtn: { alignSelf: "flex-start", backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

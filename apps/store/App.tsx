@@ -118,12 +118,6 @@ function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const presets: { label: string; name: string; roles: StaffRole[] }[] = [
-    { label: "Designer", name: "Lead Designer", roles: ["designer"] },
-    { label: "Embroidery & Press", name: "Embroidery & Press Operator", roles: ["apparel_operator"] },
-    { label: "Cashier", name: "Counter Cashier", roles: ["cashier"] },
-    { label: "Manager", name: "Shop Manager", roles: ["manager"] }
-  ];
 
   async function signIn() {
     setMessage("");
@@ -170,15 +164,6 @@ function MobileLogin({ onLogin }: { onLogin: (staff: Staff) => void }) {
           <Pressable style={[styles.button, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void signIn()}>
             {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
           </Pressable>
-        </View>
-        <Text style={styles.muted}>Local development shortcuts</Text>
-        <View style={styles.grid}>
-          {presets.map((preset) => (
-            <Pressable style={styles.tile} key={preset.label} onPress={() => onLogin({ name: preset.name, roles: preset.roles })}>
-              <Text style={styles.tileTitle}>{preset.label}</Text>
-              <Text style={styles.muted}>{preset.roles.map((role) => role.replace("_", " ")).join(", ")}</Text>
-            </Pressable>
-          ))}
         </View>
       </View>
     </View>
@@ -283,6 +268,7 @@ function MyWork({ orders, staff, onRefresh }: { orders: Order[]; staff: Staff; o
   const mine = orders.filter((order) => myId && order.staffAssigneeId === myId && !done.includes(order.status));
   const unclaimed = orders.filter((order) => !order.staffAssigneeId && claimable.includes(order.status));
   const statuses = storeData.workflowColumns.map((column) => column.status);
+  const [open, setOpen] = useState<string | null>(null);
 
   async function claim(order: Order) {
     if (!myId) return;
@@ -315,21 +301,28 @@ function MyWork({ orders, staff, onRefresh }: { orders: Order[]; staff: Staff; o
         {myId && mine.length === 0 ? <Text style={styles.muted}>No active jobs assigned to you.</Text> : null}
         {mine.map((order) => {
           const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+          const isOpen = open === order.id;
           return (
             <View style={styles.job} key={order.id}>
-              <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
-              <Text style={styles.muted}>{order.queueName.replace("_", " ")} | {statusLabel(order.status)}</Text>
-              {order.activityLog[0] ? <Text style={styles.muted}>{order.activityLog[0].message}</Text> : null}
-              <View style={styles.row}>
-                {nextStatus ? (
-                  <Pressable style={styles.secondaryButton} onPress={() => void advance(order)}>
-                    <Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text>
-                  </Pressable>
-                ) : null}
-                <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
-                  <Text style={styles.secondaryButtonText}>Share invoice</Text>
-                </Pressable>
-              </View>
+              <Pressable onPress={() => setOpen(isOpen ? null : order.id)}>
+                <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+                <Text style={styles.muted}>{order.queueName.replace("_", " ")} | {statusLabel(order.status)}</Text>
+              </Pressable>
+              {isOpen ? (
+                <>
+                  {order.activityLog[0] ? <Text style={styles.muted}>{order.activityLog[0].message}</Text> : null}
+                  <View style={styles.row}>
+                    {nextStatus ? (
+                      <Pressable style={styles.secondaryButton} onPress={() => void advance(order)}>
+                        <Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
+                      <Text style={styles.secondaryButtonText}>Share invoice</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
             </View>
           );
         })}

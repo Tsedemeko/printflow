@@ -490,9 +490,9 @@ function Stock({ inventory, movements, onMove }: { inventory: InventoryItem[]; m
                   value={qty[item.id] ?? ""}
                   onChangeText={(value) => setQty((prev) => ({ ...prev, [item.id]: value }))}
                 />
-                <View style={styles.row}>
-                  <Pressable style={styles.button} onPress={() => submit(item.id, "receive")}><Text style={styles.buttonText}>Stock in</Text></Pressable>
-                  <Pressable style={styles.shareBtn} onPress={() => submit(item.id, "issue")}><Text style={styles.chipText}>Stock out</Text></Pressable>
+                <View style={[styles.row, { flexWrap: "nowrap", alignItems: "stretch" }]}>
+                  <Pressable style={styles.stockBtn} onPress={() => submit(item.id, "receive")}><Text style={styles.buttonText}>Stock in</Text></Pressable>
+                  <Pressable style={styles.stockBtnOut} onPress={() => submit(item.id, "issue")}><Text style={styles.stockBtnOutText}>Stock out</Text></Pressable>
                 </View>
               </>
             ) : null}
@@ -560,6 +560,9 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#c19a3e" },
   chipText: { color: "#ffffff", fontWeight: "700" },
   shareBtn: { alignSelf: "flex-start", backgroundColor: "#0f1f3d", borderRadius: 8, flexShrink: 0, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  stockBtn: { alignItems: "center", backgroundColor: "#0f1f3d", borderRadius: 8, flex: 1, paddingVertical: 12 },
+  stockBtnOut: { alignItems: "center", backgroundColor: "#ffffff", borderColor: "#0f1f3d", borderWidth: 1, borderRadius: 8, flex: 1, paddingVertical: 11 },
+  stockBtnOutText: { color: "#0f1f3d", fontWeight: "800" },
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   kpi: { backgroundColor: "#0f1f3d", borderRadius: 12, flexGrow: 1, minWidth: 150, padding: 14 },
   kpiLabel: { color: "#d9c489", fontSize: 12, fontWeight: "700" },

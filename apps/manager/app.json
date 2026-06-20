@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Finesse Manager",
-    "slug": "finess-manager",
-    "owner": "sethmaphosa",
+    "slug": "manager",
+    "owner": "chesa-pride",
     "version": "0.1.0",
     "platforms": [
       "ios",
@@ -32,7 +32,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "ef0bd77e-97f7-4eb2-9f73-c221f083498c"
+        "projectId": "7769520f-7c52-4d7f-b858-5d2207782ced"
       }
     },
     "web": {

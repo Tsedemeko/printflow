@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Finesse Staff",
-    "slug": "finesse-store",
-    "owner": "sethmaphosa",
+    "slug": "store",
+    "owner": "chesa-pride",
     "version": "0.1.0",
     "platforms": [
       "ios",
@@ -32,7 +32,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "0d54bc03-6d51-4a52-85dd-112dbbd2f82f"
+        "projectId": "61659783-b786-46ae-93d6-7b7c57f26ac6"
       }
     },
     "web": {

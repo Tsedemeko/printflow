@@ -2,7 +2,8 @@ import {
   catalog,
   defaultAccessForRoles,
   defaultDepositRules,
-  defaultDiscountRules
+  defaultDiscountRules,
+  defaultKioskCategories
 } from "@printflow/shared";
 import type {
   ActivityEvent,
@@ -11,6 +12,7 @@ import type {
   CounterQueueTicket,
   Customer,
   DepositRule,
+  KioskCategory,
   Order,
   OrderItem,
   Payment,
@@ -43,7 +45,8 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     inventory,
     notifications,
     staff,
-    counterQueue
+    counterQueue,
+    kioskCategories
   ] = await Promise.all([
     supabaseRest<Row[]>("customers?select=*"),
     supabaseRest<Row[]>("catalog_products?select=*"),
@@ -57,7 +60,8 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     supabaseRest<Row[]>("inventory_items?select=*"),
     supabaseRest<Row[]>("notification_events?select=*"),
     supabaseRest<Row[]>("profiles?select=*"),
-    supabaseRest<Row[]>("counter_queue_tickets?select=*")
+    supabaseRest<Row[]>("counter_queue_tickets?select=*"),
+    supabaseRest<Row[]>("kiosk_categories?select=*&order=position").catch(() => [] as Row[])
   ]);
 
   const customerModels = customers.map(rowToCustomer);
@@ -80,8 +84,13 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     inventory: inventory.map(rowToInventoryItem),
     notifications: notifications.map(rowToNotification),
     staff: staff.map(rowToStaff),
-    counterQueue: counterQueue.map(rowToCounterTicket)
+    counterQueue: counterQueue.map(rowToCounterTicket),
+    kioskCategories: kioskCategories.length ? kioskCategories.map(rowToKioskCategory) : defaultKioskCategories
   };
+}
+
+function rowToKioskCategory(row: Row): KioskCategory {
+  return { id: string(row.id), label: string(row.label), description: string(row.description) };
 }
 
 export async function persistSupabaseState(state: AppState): Promise<void> {
@@ -93,7 +102,8 @@ export async function persistSupabaseState(state: AppState): Promise<void> {
     syncTable("customers", state.customers.map(customerToRow)),
     syncTable("inventory_items", state.inventory.map(inventoryItemToRow)),
     syncTable("counter_queue_tickets", state.counterQueue.map(counterTicketToRow)),
-    syncTable("profiles", state.staff.map(staffToRow))
+    syncTable("profiles", state.staff.map(staffToRow)),
+    syncTable("kiosk_categories", state.kioskCategories.map((category, index) => ({ id: category.id, label: category.label, description: category.description, position: index })))
   ]);
   await Promise.all([
     syncTable("orders", state.orders.map(orderToRow)),

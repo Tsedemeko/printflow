@@ -212,6 +212,19 @@ create table audit_logs (
   created_at timestamptz not null default now()
 );
 
+create table kiosk_categories (
+  id text primary key,
+  label text not null,
+  description text not null default '',
+  position integer not null default 0
+);
+
+insert into kiosk_categories (id, label, description, position) values
+  ('apparel', 'Apparel, Sublimation & Fashion', 'T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers.', 0),
+  ('signage', 'Banners & Signage', 'X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls.', 1),
+  ('promotional', 'Branding & Promo', 'Umbrellas, table cloths, oval boards, and branded gifts.', 2)
+on conflict (id) do nothing;
+
 create index orders_status_idx on orders(status);
 create index orders_customer_idx on orders(customer_id);
 create index order_items_batch_idx on order_items(batch_key);

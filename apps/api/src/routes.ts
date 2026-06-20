@@ -31,6 +31,7 @@ import {
   approveProof,
   queueNotification,
   recordPayment,
+  replaceKioskCategories,
   sendProof,
   publicStaff,
   state,
@@ -169,6 +170,14 @@ router.patch("/admin/staff/:id", requireAccess("staff_management"), (req, res) =
 router.delete("/admin/staff/:id", requireAccess("staff_management"), (req, res) => {
   deleteStaffMember(routeParam(req, "id"));
   res.status(204).send();
+});
+
+router.get("/kiosk/categories", (_req, res) => res.json({ categories: state.kioskCategories }));
+router.put("/kiosk/categories", requireAccess("catalog_pricing"), (req, res) => {
+  const body = z.object({
+    categories: z.array(z.object({ id: z.string().min(1), label: z.string().min(1), description: z.string().optional().default("") }))
+  }).parse(req.body);
+  res.json({ categories: replaceKioskCategories(body.categories) });
 });
 
 router.get("/catalog/products", (_req, res) => res.json({ products: state.catalog }));

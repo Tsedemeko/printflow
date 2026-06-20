@@ -11,11 +11,13 @@ void SplashScreen.preventAutoHideAsync();
 type KioskStep = "categories" | "products" | "customize" | "customer" | "ticket" | "collect";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
 
-const categories = [
+type KioskCat = { id: string; label: string; description: string };
+
+const DEFAULT_CATEGORIES: KioskCat[] = [
   { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
   { id: "signage", label: "Banners & Signage", description: "X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls." },
   { id: "promotional", label: "Branding & Promo", description: "Umbrellas, table cloths, oval boards, and branded gifts." }
-] as const;
+];
 
 export default function App() {
   useKeepAwake("printflow-kiosk");
@@ -35,7 +37,15 @@ export default function App() {
   // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
   const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
 
+  const [categories, setCategories] = useState<KioskCat[]>(DEFAULT_CATEGORIES);
+
   useEffect(() => { void SplashScreen.hideAsync(); }, []);
+  useEffect(() => {
+    fetch(`${apiUrl}/kiosk/categories`)
+      .then((response) => response.json())
+      .then((payload: { categories: KioskCat[] }) => { if (payload.categories?.length) setCategories(payload.categories); })
+      .catch(() => undefined);
+  }, []);
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   // Reset selections to each product's defaults when the product changes.

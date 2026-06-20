@@ -4,6 +4,7 @@ import {
   customerOrderCreated,
   defaultDepositRules,
   defaultDiscountRules,
+  defaultKioskCategories,
   defaultAccessForRole,
   defaultAccessForRoles,
   preflightArtwork,
@@ -18,6 +19,7 @@ import type {
   CounterQueueTicket,
   Customer,
   DepositRule,
+  KioskCategory,
   NotificationPayload,
   Order,
   OrderStatus,
@@ -53,6 +55,7 @@ export interface AppState {
   staff: StaffRecord[];
   counterQueue: CounterQueueTicket[];
   stockMovements: StockMovement[];
+  kioskCategories: KioskCategory[];
 }
 
 export interface StaffRecord extends StaffMember {
@@ -191,7 +194,8 @@ const initialState: AppState = {
     }
   ],
   counterQueue: [],
-  stockMovements: []
+  stockMovements: [],
+  kioskCategories: defaultKioskCategories
 };
 
 export const state: AppState = loadState();
@@ -210,6 +214,7 @@ export async function hydratePersistentState() {
     depositRules: remoteState.depositRules?.length ? remoteState.depositRules : state.depositRules,
     discountRules: remoteState.discountRules?.length ? remoteState.discountRules : state.discountRules,
     inventory: remoteState.inventory?.length ? remoteState.inventory : state.inventory,
+    kioskCategories: remoteState.kioskCategories?.length ? remoteState.kioskCategories : state.kioskCategories,
     staff
   });
   remoteHydrated = true;
@@ -728,6 +733,16 @@ export function groupProductionBatches() {
     }
   }
   return [...groups.values()];
+}
+
+export function replaceKioskCategories(categories: KioskCategory[]): KioskCategory[] {
+  state.kioskCategories = categories.map((category) => ({
+    id: String(category.id).trim(),
+    label: String(category.label).trim(),
+    description: String(category.description ?? "").trim()
+  })).filter((category) => category.id && category.label);
+  persistState();
+  return state.kioskCategories;
 }
 
 function upsertCustomer(input: { name: string; mobile: string; email?: string | undefined }): Customer {

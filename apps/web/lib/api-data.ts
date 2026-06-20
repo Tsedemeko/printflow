@@ -109,6 +109,13 @@ export async function getNotifications(): Promise<NotificationItem[]> {
   return payload?.notifications ?? [];
 }
 
+export interface KioskCategoryItem { id: string; label: string; description: string }
+
+export async function getKioskCategories(): Promise<KioskCategoryItem[]> {
+  const payload = await fetchJson<{ categories: KioskCategoryItem[] }>("/kiosk/categories");
+  return payload?.categories ?? [];
+}
+
 export async function getReportMetrics(): Promise<Metrics> {
   const payload = await fetchJson<{ metrics: Metrics }>("/reports/summary");
   return payload?.metrics ?? emptyMetrics;

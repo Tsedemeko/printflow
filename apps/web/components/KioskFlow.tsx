@@ -1,13 +1,15 @@
 "use client";
 
 import { catalog, calculateRequiredDeposit, priceQuote } from "@printflow/shared";
-import type { CatalogProduct, CounterQueueTicket, ProductCategory } from "@printflow/shared";
+import type { CatalogProduct, CounterQueueTicket } from "@printflow/shared";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-const categories: { id: ProductCategory; label: string; description: string }[] = [
+type KioskCat = { id: string; label: string; description: string };
+
+const DEFAULT_CATEGORIES: KioskCat[] = [
   { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
   { id: "signage", label: "Banners & Signage", description: "X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls." },
   { id: "promotional", label: "Branding & Promo", description: "Umbrellas, table cloths, oval boards, and branded gifts." }
@@ -17,8 +19,9 @@ type Step = "categories" | "products" | "customize" | "customer" | "ticket" | "c
 
 export function KioskFlow() {
   const [products, setProducts] = useState<CatalogProduct[]>(catalog.filter((item) => item.enabled ?? true));
+  const [categories, setCategories] = useState<KioskCat[]>(DEFAULT_CATEGORIES);
   const [step, setStep] = useState<Step>("categories");
-  const [category, setCategory] = useState<ProductCategory>("apparel");
+  const [category, setCategory] = useState<string>("apparel");
   const [productId, setProductId] = useState(catalog.find((item) => item.category === "apparel")?.id ?? catalog[0]!.id);
   const [quantity, setQuantity] = useState(1);
   const [customer, setCustomer] = useState({ name: "", mobile: "", email: "" });
@@ -39,6 +42,12 @@ export function KioskFlow() {
         setProducts(enabled);
         const first = enabled.find((item) => item.category === category) ?? enabled[0];
         if (first) setProductId(first.id);
+      })
+      .catch(() => undefined);
+    fetch(`${apiUrl}/kiosk/categories`)
+      .then((response) => response.json())
+      .then((payload: { categories: KioskCat[] }) => {
+        if (payload.categories?.length) setCategories(payload.categories);
       })
       .catch(() => undefined);
   }, []);

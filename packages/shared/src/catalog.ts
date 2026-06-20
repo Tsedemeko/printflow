@@ -513,3 +513,11 @@ export function getProduct(productId: string): CatalogProduct {
   }
   return product;
 }
+
+import type { KioskCategory } from "./types.js";
+
+export const defaultKioskCategories: KioskCategory[] = [
+  { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
+  { id: "signage", label: "Banners & Signage", description: "X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls." },
+  { id: "promotional", label: "Branding & Promo", description: "Umbrellas, table cloths, oval boards, and branded gifts." }
+];

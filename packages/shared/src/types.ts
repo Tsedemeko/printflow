@@ -190,3 +190,9 @@ export interface NotificationPayload {
   message: string;
   metadata?: Record<string, unknown> | undefined;
 }
+
+export interface KioskCategory {
+  id: string;
+  label: string;
+  description: string;
+}

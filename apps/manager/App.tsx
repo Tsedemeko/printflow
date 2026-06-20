@@ -255,7 +255,7 @@ function Overview({ orders, metrics, board, inventory }: { orders: Order[]; metr
         {ready.length === 0 ? <Text style={styles.muted}>Nothing waiting for collection.</Text> : null}
         {ready.map((order) => (
           <View style={styles.rowBetween} key={order.id}>
-            <Text style={styles.muted}>{order.orderNumber} · {order.customer.name}</Text>
+            <Text style={[styles.muted, styles.flex1]}>{order.orderNumber} · {order.customer.name}</Text>
             <Text style={styles.pill}>{order.customer.mobile}</Text>
           </View>
         ))}
@@ -266,7 +266,7 @@ function Overview({ orders, metrics, board, inventory }: { orders: Order[]; metr
         {outstanding.length === 0 ? <Text style={styles.muted}>All balances settled.</Text> : null}
         {outstanding.map((order) => (
           <View style={styles.rowBetween} key={order.id}>
-            <Text style={styles.muted}>{order.orderNumber} · {order.customer.name}</Text>
+            <Text style={[styles.muted, styles.flex1]}>{order.orderNumber} · {order.customer.name}</Text>
             <Text style={styles.pill}>R{order.balanceDue.toFixed(2)}</Text>
           </View>
         ))}
@@ -277,7 +277,7 @@ function Overview({ orders, metrics, board, inventory }: { orders: Order[]; metr
         {lowStock.length === 0 ? <Text style={styles.muted}>Stock levels are healthy.</Text> : null}
         {lowStock.map((item) => (
           <View style={styles.rowBetween} key={item.id}>
-            <Text style={styles.muted}>{item.name}</Text>
+            <Text style={[styles.muted, styles.flex1]}>{item.name}</Text>
             <Text style={styles.pill}>{item.quantityOnHand} / {item.reorderPoint}</Text>
           </View>
         ))}
@@ -312,7 +312,7 @@ function Orders({ orders, roster, onAdvance, onAssign, onRush }: {
         return (
           <View style={styles.panel} key={order.id}>
             <View style={styles.rowBetween}>
-              <Text style={styles.panelTitle}>{order.orderNumber}{order.rush ? "  ⚡" : ""}</Text>
+              <Text style={[styles.panelTitle, styles.flex1]}>{order.orderNumber}{order.rush ? "  ⚡" : ""}</Text>
               <Text style={styles.pill}>{statusLabel(order.status)}</Text>
             </View>
             <Text style={styles.muted}>{order.customer.name} · Balance R{order.balanceDue.toFixed(2)}</Text>
@@ -362,7 +362,7 @@ function Payments({ orders, metrics }: { orders: Order[]; metrics: Metrics | nul
         {txns.length === 0 ? <Text style={styles.muted}>No payments recorded yet.</Text> : null}
         {txns.slice(0, 40).map((txn) => (
           <View style={styles.rowBetween} key={txn.id}>
-            <Text style={styles.muted}>{new Date(txn.createdAt).toLocaleDateString("en-ZA")} · {txn.orderNumber} · {txn.method.replace("_", " ")}</Text>
+            <Text style={[styles.muted, styles.flex1]}>{new Date(txn.createdAt).toLocaleDateString("en-ZA")} · {txn.orderNumber} · {txn.method.replace("_", " ")}</Text>
             <Text style={styles.pill}>R{txn.amount.toFixed(2)}</Text>
           </View>
         ))}
@@ -439,7 +439,7 @@ function Team({ orders, roster, error, onAdd, onDeactivate }: {
         {roster.length === 0 ? <Text style={styles.muted}>No active staff.</Text> : null}
         {roster.map((member) => (
           <View style={styles.rowBetween} key={member.id}>
-            <Text style={styles.muted}>{member.name} · {member.role.replace("_", " ")} · {jobsFor(member.id)} active</Text>
+            <Text style={[styles.muted, styles.flex1]}>{member.name} · {member.role.replace("_", " ")} · {jobsFor(member.id)} active</Text>
             <Pressable style={styles.shareBtn} onPress={() => void onDeactivate(member.id)}><Text style={styles.chipText}>Deactivate</Text></Pressable>
           </View>
         ))}
@@ -476,7 +476,7 @@ function Stock({ inventory, movements, onMove }: { inventory: InventoryItem[]; m
           <View style={styles.panel} key={item.id}>
             <Pressable onPress={() => setOpen(isOpen ? null : item.id)}>
               <View style={styles.rowBetween}>
-                <Text style={styles.panelTitle}>{item.name}{low ? <Text style={styles.role}> · LOW</Text> : null}</Text>
+                <Text style={[styles.panelTitle, styles.flex1]}>{item.name}{low ? <Text style={styles.role}> · LOW</Text> : null}</Text>
                 <Text style={styles.pill}>{item.quantityOnHand}</Text>
               </View>
             </Pressable>
@@ -548,17 +548,18 @@ const styles = StyleSheet.create({
   panelTitle: { color: "#0f1f3d", fontSize: 18, fontWeight: "800" },
   role: { color: "#5b6b86", fontSize: 13, fontWeight: "600" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  rowBetween: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingVertical: 7 },
+  rowBetween: { alignItems: "center", flexDirection: "row", gap: 10, justifyContent: "space-between", paddingVertical: 7 },
+  flex1: { flex: 1 },
   button: { backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12 },
   buttonText: { color: "#ffffff", fontWeight: "800", textAlign: "center" },
   input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 44, paddingHorizontal: 10 },
   warning: { color: "#b91c1c", fontWeight: "800", marginTop: 10 },
   job: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 12 },
-  pill: { backgroundColor: "#f3ecd9", borderRadius: 999, color: "#0f1f3d", fontWeight: "700", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 4 },
+  pill: { backgroundColor: "#f3ecd9", borderRadius: 999, color: "#0f1f3d", flexShrink: 0, fontWeight: "700", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 4 },
   chip: { backgroundColor: "#0f1f3d", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   chipActive: { backgroundColor: "#c19a3e" },
   chipText: { color: "#ffffff", fontWeight: "700" },
-  shareBtn: { alignSelf: "flex-start", backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  shareBtn: { alignSelf: "flex-start", backgroundColor: "#0f1f3d", borderRadius: 8, flexShrink: 0, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   kpi: { backgroundColor: "#0f1f3d", borderRadius: 12, flexGrow: 1, minWidth: 150, padding: 14 },
   kpiLabel: { color: "#d9c489", fontSize: 12, fontWeight: "700" },

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
 import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
@@ -64,8 +65,17 @@ export default function App() {
   // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
   const sidePad = width >= 768 ? Math.max(18, (width - 760) / 2) : 18;
   const tabs = staff ? tabsForRoles(staff.roles) : [];
+  // A cashier runs the till on this device — keep the screen awake the whole session so the
+  // POS never sleeps mid-sale. Released automatically when they sign out or the role changes.
+  const isCashier = !!staff?.roles.includes("cashier");
 
   useEffect(() => { void SplashScreen.hideAsync(); }, []);
+
+  useEffect(() => {
+    if (!isCashier) return undefined;
+    void activateKeepAwakeAsync("printflow-pos");
+    return () => { deactivateKeepAwake("printflow-pos"); };
+  }, [isCashier]);
 
   function logout() {
     staffAccessToken = "";

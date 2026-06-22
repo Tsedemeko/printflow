@@ -2,7 +2,7 @@ import type { AccessArea, StaffRole } from "./types.js";
 
 export const roleAccess: Record<StaffRole, AccessArea[]> = {
   owner: ["dashboard", "catalog_pricing", "production", "pos", "crm", "inventory", "reports", "staff_management", "kiosk", "online_orders"],
-  manager: ["dashboard", "catalog_pricing", "production", "pos", "crm", "inventory", "reports", "kiosk", "online_orders"],
+  manager: ["dashboard", "catalog_pricing", "production", "pos", "crm", "inventory", "reports", "staff_management", "kiosk", "online_orders"],
   sales_assistant: ["dashboard", "pos", "crm", "kiosk", "online_orders"],
   cashier: ["pos", "crm"],
   designer: ["production", "crm", "online_orders"],

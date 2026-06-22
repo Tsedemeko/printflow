@@ -69,8 +69,11 @@ export function EmailSettingsManager() {
     <article className="card glossy">
       <h2>Email (send invoices from your Gmail)</h2>
       <p className="muted-note">
-        Invoices are sent from your own Gmail account. In Google: Account → Security → turn on 2-Step Verification → App passwords,
-        create a password for &ldquo;Mail&rdquo;, and paste the 16-character code below. We never show it again after saving.
+        Invoices are sent from your own Gmail account — enter your Gmail address and password below. We never show the password again after saving.
+      </p>
+      <p className="muted-note">
+        Note: if your Google account has 2-Step Verification on, Google blocks the normal password for apps — you&rsquo;ll need an App Password
+        (Google Account → Security → App passwords) instead. Otherwise your normal Gmail password works.
       </p>
       {loading ? <p className="muted-note">Loading…</p> : (
         <>
@@ -84,8 +87,8 @@ export function EmailSettingsManager() {
               <input value={state.user} placeholder="finesse@gmail.com" onChange={(event) => setState((prev) => ({ ...prev, user: event.target.value }))} />
             </label>
             <label>
-              App password {state.hasPassword ? <span className="muted-note">(saved — leave blank to keep)</span> : null}
-              <input type="password" value={password} placeholder={state.hasPassword ? "••••••••••••••••" : "16-character app password"} onChange={(event) => setPassword(event.target.value)} />
+              Gmail password {state.hasPassword ? <span className="muted-note">(saved — leave blank to keep)</span> : null}
+              <input type="password" value={password} placeholder={state.hasPassword ? "••••••••••••" : "Your Gmail password"} onChange={(event) => setPassword(event.target.value)} />
             </label>
             <label className="row" style={{ alignItems: "center", gap: 8 }}>
               <input type="checkbox" checked={state.enabled} onChange={(event) => setState((prev) => ({ ...prev, enabled: event.target.checked }))} />

@@ -829,7 +829,14 @@ function upsertCustomer(input: { name: string; mobile: string; email?: string | 
 }
 
 function nextOrderNumber(): string {
-  return `#${1042 + state.orders.length}`;
+  // Derive from the highest existing number (not the count) so deleting an order, restarts,
+  // or out-of-order data never produce a duplicate. createOrder is synchronous from here to
+  // the push, so two concurrent creates can't read the same max.
+  const highest = state.orders.reduce((max, order) => {
+    const n = Number(String(order.orderNumber).replace(/[^0-9]/g, ""));
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 1050);
+  return `#${highest + 1}`;
 }
 
 function activity(actor: ActivityEvent["actor"], event: string, message: string): ActivityEvent {

@@ -113,6 +113,13 @@ export default function App() {
     if (staff) void refreshAll();
   }, [staff]);
 
+  // Keep the waiting queue (and orders) live so kiosk/counter check-ins appear without a manual refresh.
+  useEffect(() => {
+    if (!staff) return undefined;
+    const id = setInterval(() => { void refreshCounterQueue(); void refreshOrders(); }, 15000);
+    return () => clearInterval(id);
+  }, [staff]);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={[styles.header, { paddingHorizontal: sidePad }]}>
@@ -455,17 +462,27 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
 
   async function pay(method: PaymentMethod) {
     if (!order) return;
-    await fetch(`${apiUrl}/payments/${order.id}`, {
+    // Charge what's actually outstanding. Never record a zero (or negative) payment.
+    const amount = order.balanceDue > 0 ? order.balanceDue : 0;
+    if (amount <= 0) {
+      setMessage(`${order.orderNumber} is already settled — nothing to pay.`);
+      return;
+    }
+    const response = await fetch(`${apiUrl}/payments/${order.id}`, {
       method: "POST",
       headers: staffHeaders(["cashier"]),
-      body: JSON.stringify({ method, amount: order.balanceDue || order.requiredDeposit || order.total })
+      body: JSON.stringify({ method, amount })
     });
+    if (!response.ok) {
+      setMessage("Could not record the payment. Please try again.");
+      return;
+    }
     await fetch(`${apiUrl}/payments/${order.id}/receipt`, {
       method: "POST",
       headers: staffHeaders(["cashier"]),
       body: JSON.stringify({ channel: "sms" })
     });
-    setMessage(`Payment recorded for ${order.orderNumber}. Receipt queued by SMS.`);
+    setMessage(`Payment of R${amount.toFixed(2)} recorded for ${order.orderNumber}. Receipt queued by SMS.`);
     await onRefresh();
   }
 

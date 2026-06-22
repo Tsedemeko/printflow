@@ -48,13 +48,15 @@ export default function App() {
   }, []);
   const product = kioskData.catalog.find((item) => item.id === selectedProductId) ?? kioskData.catalog[0]!;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const [quantity, setQuantity] = useState(1);
   // Reset selections to each product's defaults when the product changes.
   useEffect(() => {
     setSelectedOptions(Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""])));
+    setQuantity(1);
   }, [product.id]);
   const quote = useMemo(() => {
-    return priceQuote([{ productId: product.id, quantity: 1, selectedOptions }]);
-  }, [product, selectedOptions]);
+    return priceQuote([{ productId: product.id, quantity, selectedOptions }]);
+  }, [product, quantity, selectedOptions]);
   const deposit = calculateRequiredDeposit(quote.total, quote.items);
 
   async function createPreOrder() {
@@ -66,7 +68,7 @@ export default function App() {
         body: JSON.stringify({
           source: "kiosk",
           customer: { name: customerName, mobile: customerMobile },
-          items: [{ productId: product.id, quantity: 1, selectedOptions }]
+          items: [{ productId: product.id, quantity, selectedOptions }]
         })
       });
       const payload = await response.json();
@@ -197,6 +199,19 @@ export default function App() {
                   </View>
                 </View>
               ))}
+              <View style={styles.optionBlock}>
+                <Text style={styles.panelTitle}>Quantity</Text>
+                <View style={styles.qtyRow}>
+                  <Pressable style={styles.qtyBtn} onPress={() => setQuantity((q) => Math.max(1, q - 1))}><Text style={styles.qtyBtnText}>–</Text></Pressable>
+                  <TextInput
+                    style={styles.qtyInput}
+                    keyboardType="number-pad"
+                    value={String(quantity)}
+                    onChangeText={(t) => setQuantity(Math.max(1, Number(t.replace(/[^0-9]/g, "")) || 1))}
+                  />
+                  <Pressable style={styles.qtyBtn} onPress={() => setQuantity((q) => q + 1)}><Text style={styles.qtyBtnText}>+</Text></Pressable>
+                </View>
+              </View>
               <Text style={styles.total}>Estimate R{quote.total.toFixed(2)} | Deposit R{deposit.amount.toFixed(2)}</Text>
               <Pressable style={styles.button} onPress={() => setStep("customer")}><Text style={styles.buttonText}>Continue</Text></Pressable>
             </View>
@@ -284,6 +299,10 @@ const styles = StyleSheet.create({
   secondaryButton: { alignSelf: "center", alignItems: "center", backgroundColor: "#ffffff", borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, minWidth: 240, marginTop: 14, paddingHorizontal: 28, paddingVertical: 12 },
   secondaryButtonText: { color: "#0f1f3d", fontWeight: "900" },
   input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 46, paddingHorizontal: 12 },
+  qtyRow: { alignItems: "center", flexDirection: "row", gap: 14, marginTop: 8 },
+  qtyBtn: { alignItems: "center", backgroundColor: "#0f1f3d", borderRadius: 8, height: 44, justifyContent: "center", width: 44 },
+  qtyBtnText: { color: "#ffffff", fontSize: 22, fontWeight: "900" },
+  qtyInput: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, fontSize: 18, fontWeight: "800", minHeight: 46, minWidth: 70, paddingHorizontal: 12, textAlign: "center" },
   big: { color: "#0f1f3d", fontSize: 56, fontWeight: "900", marginVertical: 8 },
   statusBox: { backgroundColor: "#f3ecd9", borderRadius: 8, marginTop: 12, padding: 12 }
 });

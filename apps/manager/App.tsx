@@ -144,11 +144,11 @@ export default function App() {
   async function addStaff(input: { name: string; email: string; role: string; password: string }): Promise<string> {
     const res = await fetch(`${apiUrl}/admin/staff`, {
       method: "POST",
-      headers: headers(["owner"]),
+      headers: headers(["manager"]),
       body: JSON.stringify({ name: input.name, email: input.email, role: input.role, temporaryPassword: input.password })
     });
     if (!res.ok) {
-      return res.status === 403 ? "Only an owner can add team members." : "Could not add member (check the details).";
+      return res.status === 403 ? "Only an owner or manager can add team members." : "Could not add member (check the details).";
     }
     await refresh();
     return "";
@@ -157,10 +157,23 @@ export default function App() {
   async function deactivateStaff(id: string): Promise<void> {
     await fetch(`${apiUrl}/admin/staff/${id}`, {
       method: "PATCH",
-      headers: headers(["owner"]),
+      headers: headers(["manager"]),
       body: JSON.stringify({ active: false })
     });
     await refresh();
+  }
+
+  async function editStaff(id: string, patch: { name?: string; role?: string }): Promise<string> {
+    const res = await fetch(`${apiUrl}/admin/staff/${id}`, {
+      method: "PATCH",
+      headers: headers(["manager"]),
+      body: JSON.stringify(patch)
+    });
+    if (!res.ok) {
+      return res.status === 403 ? "Only an owner or manager can edit team members." : "Could not save changes.";
+    }
+    await refresh();
+    return "";
   }
 
   async function moveStock(itemId: string, kind: "receive" | "issue", quantity: number) {
@@ -205,7 +218,7 @@ export default function App() {
         {staff && tab === "overview" ? <Overview orders={orders} metrics={metrics} board={board} inventory={inventory} /> : null}
         {staff && tab === "orders" ? <Orders orders={orders} roster={roster} onAdvance={advance} onAssign={assign} onRush={setRush} /> : null}
         {staff && tab === "payments" ? <Payments orders={orders} metrics={metrics} /> : null}
-        {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAdd={addStaff} onDeactivate={deactivateStaff} /> : null}
+        {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAdd={addStaff} onDeactivate={deactivateStaff} onEdit={editStaff} /> : null}
         {staff && tab === "stock" ? <Stock inventory={inventory} movements={movements} onMove={moveStock} /> : null}
         {staff && tab === "settings" ? <Settings /> : null}
       </ScrollView>
@@ -455,12 +468,13 @@ function Payments({ orders, metrics }: { orders: Order[]; metrics: Metrics | nul
 
 const ROLE_OPTIONS = ["owner", "manager", "cashier", "designer", "apparel_operator"];
 
-function Team({ orders, roster, error, onAdd, onDeactivate }: {
+function Team({ orders, roster, error, onAdd, onDeactivate, onEdit }: {
   orders: Order[];
   roster: RosterMember[];
   error: string;
   onAdd: (input: { name: string; email: string; role: string; password: string }) => Promise<string>;
   onDeactivate: (id: string) => Promise<void>;
+  onEdit: (id: string, patch: { name?: string; role?: string }) => Promise<string>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -469,6 +483,27 @@ function Team({ orders, roster, error, onAdd, onDeactivate }: {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("designer");
+  const [editMsg, setEditMsg] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  function startEdit(member: RosterMember) {
+    setEditId(member.id);
+    setEditName(member.name);
+    setEditRole(member.role);
+    setEditMsg("");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editName.trim()) { setEditMsg("Name is required."); return; }
+    setEditBusy(true);
+    const err = await onEdit(id, { name: editName.trim(), role: editRole });
+    setEditBusy(false);
+    if (err) { setEditMsg(err); return; }
+    setEditId(null);
+  }
 
   const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
   const jobsFor = (id: string) => active.filter((order) => order.staffAssigneeId === id).length;
@@ -520,9 +555,28 @@ function Team({ orders, roster, error, onAdd, onDeactivate }: {
         <Text style={styles.panelTitle}>Team members</Text>
         {roster.length === 0 ? <Text style={styles.muted}>No active staff.</Text> : null}
         {roster.map((member) => (
-          <View style={styles.rowBetween} key={member.id}>
-            <Text style={[styles.muted, styles.flex1]}>{member.name} · {member.role.replace("_", " ")} · {jobsFor(member.id)} active</Text>
-            <Pressable style={styles.shareBtn} onPress={() => void onDeactivate(member.id)}><Text style={styles.chipText}>Deactivate</Text></Pressable>
+          <View key={member.id} style={{ marginTop: 10 }}>
+            <View style={styles.rowBetween}>
+              <Text style={[styles.muted, styles.flex1]}>{member.name} · {member.role.replace("_", " ")} · {jobsFor(member.id)} active</Text>
+              <Pressable style={styles.shareBtn} onPress={() => (editId === member.id ? setEditId(null) : startEdit(member))}><Text style={styles.chipText}>{editId === member.id ? "Close" : "Edit"}</Text></Pressable>
+              <Pressable style={styles.shareBtn} onPress={() => void onDeactivate(member.id)}><Text style={styles.chipText}>Deactivate</Text></Pressable>
+            </View>
+            {editId === member.id ? (
+              <View style={{ marginTop: 8 }}>
+                <TextInput style={styles.input} placeholder="Full name" value={editName} onChangeText={setEditName} />
+                <View style={styles.row}>
+                  {ROLE_OPTIONS.map((option) => (
+                    <Pressable key={option} style={[styles.chip, editRole === option && styles.chipActive]} onPress={() => setEditRole(option)}>
+                      <Text style={styles.chipText}>{option.replace("_", " ")}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {editMsg ? <Text style={styles.warning}>{editMsg}</Text> : null}
+                <Pressable style={[styles.button, editBusy && styles.buttonDisabled]} disabled={editBusy} onPress={() => void saveEdit(member.id)}>
+                  {editBusy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Save changes</Text>}
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ))}
       </View>
@@ -672,13 +726,13 @@ function Settings() {
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Email (send invoices from your Gmail)</Text>
-        <Text style={styles.muted}>Google Account → Security → 2-Step Verification → App passwords → create one for &ldquo;Mail&rdquo; and paste it below. It is hidden after saving.</Text>
+        <Text style={styles.muted}>Enter your Gmail address and password. It is hidden after saving. If your account has 2-Step Verification, Google needs an App Password instead of the normal one.</Text>
         <Text style={styles.muted}>From name</Text>
         <TextInput style={styles.input} value={email.fromName} placeholder="Finesse Fashion Design Enterprise" onChangeText={(t) => setEmail((p) => ({ ...p, fromName: t }))} />
         <Text style={styles.muted}>Gmail address</Text>
         <TextInput style={styles.input} value={email.user} autoCapitalize="none" keyboardType="email-address" placeholder="finesse@gmail.com" onChangeText={(t) => setEmail((p) => ({ ...p, user: t }))} />
-        <Text style={styles.muted}>App password {email.hasPassword ? "(saved — leave blank to keep)" : ""}</Text>
-        <TextInput style={styles.input} value={password} secureTextEntry placeholder={email.hasPassword ? "••••••••••••••••" : "16-character app password"} onChangeText={setPassword} />
+        <Text style={styles.muted}>Gmail password {email.hasPassword ? "(saved — leave blank to keep)" : ""}</Text>
+        <TextInput style={styles.input} value={password} secureTextEntry placeholder={email.hasPassword ? "••••••••••••" : "Your Gmail password"} onChangeText={setPassword} />
         <Pressable style={styles.shareBtn} onPress={() => setEmail((p) => ({ ...p, enabled: !p.enabled }))}><Text style={styles.chipText}>{email.enabled ? "✓ Sending enabled" : "Enable sending"}</Text></Pressable>
         <Pressable style={styles.button} onPress={() => void saveEmail()}><Text style={styles.buttonText}>Save email settings</Text></Pressable>
         {emailNote ? <Text style={styles.muted}>{emailNote}</Text> : null}

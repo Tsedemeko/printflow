@@ -446,11 +446,17 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
   const [selectedItem, setSelectedItem] = useState<{ id: string; sku: string; name: string; quantityOnHand: number } | null>(null);
   const [message, setMessage] = useState("");
   const [showQuick, setShowQuick] = useState(false);
+  const [amountInput, setAmountInput] = useState("");
   const filteredInventory = inventory.filter((item) => `${item.sku} ${item.name}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
 
   useEffect(() => {
     void refreshInventory();
   }, []);
+
+  // Default the amount to the outstanding balance whenever the active order changes.
+  useEffect(() => {
+    setAmountInput(order && order.balanceDue > 0 ? order.balanceDue.toFixed(2) : "");
+  }, [order?.id, order?.balanceDue]);
 
   async function refreshInventory() {
     const response = await fetch(`${apiUrl}/inventory`);
@@ -462,10 +468,18 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
 
   async function pay(method: PaymentMethod) {
     if (!order) return;
-    // Charge what's actually outstanding. Never record a zero (or negative) payment.
-    const amount = order.balanceDue > 0 ? order.balanceDue : 0;
-    if (amount <= 0) {
+    if (order.balanceDue <= 0) {
       setMessage(`${order.orderNumber} is already settled — nothing to pay.`);
+      return;
+    }
+    // Use the cashier-entered amount (deposit, partial, or full). Never zero/negative or over the balance.
+    const amount = Math.round((Number(amountInput) || 0) * 100) / 100;
+    if (amount <= 0) {
+      setMessage("Enter an amount greater than zero.");
+      return;
+    }
+    if (amount > order.balanceDue + 0.001) {
+      setMessage(`Amount can't exceed the balance of R${order.balanceDue.toFixed(2)}.`);
       return;
     }
     const response = await fetch(`${apiUrl}/payments/${order.id}`, {
@@ -515,7 +529,31 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Settle order {order?.orderNumber ?? ""}</Text>
         <Text style={styles.big}>R{(order?.balanceDue ?? 0).toFixed(2)}</Text>
-        <Text style={styles.muted}>Yoco-ready card payment, cash, EFT, SnapScan, Zapper, or manual external payment.</Text>
+        {order ? (
+          <Text style={styles.muted}>
+            Total R{order.total.toFixed(2)}
+            {order.discountTotal > 0 ? ` · Discount −R${order.discountTotal.toFixed(2)}` : ""}
+            {order.requiredDeposit > 0 ? ` · Deposit R${order.requiredDeposit.toFixed(2)}` : ""}
+            {" · Balance due "}R{order.balanceDue.toFixed(2)}
+          </Text>
+        ) : null}
+        <Text style={styles.muted}>Amount to charge (edit for a deposit or part-payment):</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="decimal-pad"
+          value={amountInput}
+          onChangeText={(t) => setAmountInput(t.replace(/[^0-9.]/g, ""))}
+          placeholder="0.00"
+        />
+        {order ? (
+          <View style={styles.row}>
+            <Pressable style={styles.secondaryButton} onPress={() => setAmountInput(order.balanceDue.toFixed(2))}><Text style={styles.secondaryButtonText}>Full balance</Text></Pressable>
+            {order.requiredDeposit > 0 && order.requiredDeposit < order.balanceDue ? (
+              <Pressable style={styles.secondaryButton} onPress={() => setAmountInput(order.requiredDeposit.toFixed(2))}><Text style={styles.secondaryButtonText}>Deposit R{order.requiredDeposit.toFixed(0)}</Text></Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        <Text style={styles.muted}>Charge via Yoco, cash, EFT, or SnapScan:</Text>
         <View style={styles.row}>
           {[
             ["card_yoco", "Yoco"],

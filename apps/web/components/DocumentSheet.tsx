@@ -1,7 +1,8 @@
 import { statusLabel } from "@printflow/shared";
-import type { Order } from "@printflow/shared";
+import type { BankingDetails, Order } from "@printflow/shared";
 import { PrintButton } from "./PrintButton";
 import { ShareInvoiceButton } from "./ShareInvoiceButton";
+import { EmailInvoiceButton } from "./EmailInvoiceButton";
 
 export const SHOP = {
   name: "Finesse Fashion Design Enterprise",
@@ -24,7 +25,7 @@ function formatDate(iso: string | number | Date) {
   return new Date(iso).toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
 }
 
-export function DocumentSheet({ order, kind }: { order: Order; kind: "invoice" | "quotation" }) {
+export function DocumentSheet({ order, kind, banking }: { order: Order; kind: "invoice" | "quotation"; banking?: BankingDetails }) {
   const isQuote = kind === "quotation";
   const heading = isQuote ? "QUOTATION" : "INVOICE";
   const number = `${isQuote ? "QUO" : "INV"}-${order.orderNumber.replace("#", "")}`;
@@ -37,8 +38,15 @@ export function DocumentSheet({ order, kind }: { order: Order; kind: "invoice" |
       <div className="invoice-toolbar no-print">
         <a className="button secondary" href="/orders">← Back to orders</a>
         <div className="invoice-toolbar-actions">
+          <EmailInvoiceButton
+            orderId={order.id}
+            kind={kind}
+            customerEmail={order.customer.email}
+            label={isQuote ? "Email quotation" : "Email invoice"}
+          />
           <ShareInvoiceButton
-            label={isQuote ? "Share quotation" : "Share invoice"}
+            label="WhatsApp"
+            customerMobile={order.customer.mobile}
             shareText={`${heading} ${number} · ${SHOP.name} · ${order.customer.name}`}
           />
           <PrintButton label={isQuote ? "Print / Save quotation as PDF" : "Print / Save as PDF"} />
@@ -124,6 +132,20 @@ export function DocumentSheet({ order, kind }: { order: Order; kind: "invoice" |
                 <span className="pill">{money(payment.amount)}</span>
               </div>
             ))}
+          </section>
+        ) : null}
+
+        {banking && banking.accountNumber ? (
+          <section className="invoice-banking">
+            <span className="eyebrow">{isQuote ? "Banking details (pay deposit by EFT)" : "Banking details (pay by EFT)"}</span>
+            <div className="invoice-banking-grid">
+              {banking.bankName ? <div><span>Bank</span><strong>{banking.bankName}</strong></div> : null}
+              {banking.accountName ? <div><span>Account name</span><strong>{banking.accountName}</strong></div> : null}
+              <div><span>Account number</span><strong>{banking.accountNumber}</strong></div>
+              {banking.branchCode ? <div><span>Branch code</span><strong>{banking.branchCode}</strong></div> : null}
+              {banking.accountType ? <div><span>Account type</span><strong>{banking.accountType}</strong></div> : null}
+            </div>
+            {banking.paymentReference ? <p className="muted-note">{banking.paymentReference}</p> : null}
           </section>
         ) : null}
 

@@ -12,6 +12,7 @@ export function OrdersManager({ initialOrders }: { initialOrders: Order[] }) {
   const [editing, setEditing] = useState<Order | null>(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [emailing, setEmailing] = useState<string | null>(null);
   const filtered = useMemo(() => orders.filter((order) => `${order.orderNumber} ${order.customer.name} ${order.customer.mobile}`.toLowerCase().includes(search.toLowerCase())), [orders, search]);
 
   useEffect(() => {
@@ -55,6 +56,28 @@ export function OrdersManager({ initialOrders }: { initialOrders: Order[] }) {
     }
   }
 
+  async function emailInvoice(order: Order) {
+    const to = order.customer.email || window.prompt(`Email invoice for ${order.orderNumber} to:`) || "";
+    if (!to) return;
+    setEmailing(order.id);
+    setMessage("");
+    try {
+      const response = await fetch(`${apiUrl}/orders/${order.id}/send-invoice`, {
+        method: "POST",
+        headers: staffAuthHeaders(["cashier"]),
+        body: JSON.stringify({ kind: "invoice", to })
+      });
+      const data = await response.json().catch(() => ({})) as { to?: string; error?: string };
+      if (response.ok) setMessage(`Invoice emailed to ${data.to ?? to}.`);
+      else if (response.status === 409) setMessage(data.error ?? "Email is not set up. Configure it under Settings → Email.");
+      else setMessage(data.error ?? "Could not send the invoice email.");
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setEmailing(null);
+    }
+  }
+
   return (
     <>
       <div className="section-head">
@@ -73,6 +96,7 @@ export function OrdersManager({ initialOrders }: { initialOrders: Order[] }) {
               <button className="secondary compact" type="button" onClick={() => setEditing(order)}>View/Edit</button>
               <a className="button secondary compact" href={`/quote/${order.id}`}>Quote</a>
               <a className="button secondary compact" href={`/invoice/${order.id}`}>Invoice</a>
+              <button className="secondary compact" type="button" disabled={emailing === order.id} onClick={() => void emailInvoice(order)}>{emailing === order.id ? "Sending…" : "Email"}</button>
               <button className="secondary compact" type="button" onClick={() => void remove(order)}>Delete</button>
             </div>
           </article>

@@ -196,3 +196,26 @@ export interface KioskCategory {
   label: string;
   description: string;
 }
+
+export interface BankingDetails {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branchCode: string;
+  accountType: string;
+  // Free-text line shown under the bank block, e.g. "Use your order number as the payment reference."
+  paymentReference: string;
+}
+
+// Owner-configured outbound email. We send through their own Gmail using an App Password
+// (Google Account → Security → 2-Step Verification → App passwords), so invoices come
+// from the shop's real address. The password is write-only — never returned to the client.
+export interface EmailSettings {
+  enabled: boolean;
+  provider: "gmail";
+  fromName: string;
+  // The Gmail address that sends + receives replies.
+  user: string;
+  // True when an app password has been stored on the server (we never echo the value back).
+  hasPassword: boolean;
+}

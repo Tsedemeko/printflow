@@ -2,6 +2,8 @@ import {
   calculateRequiredDeposit,
   catalog,
   customerOrderCreated,
+  defaultBankingDetails,
+  defaultEmailSettings,
   defaultDepositRules,
   defaultDiscountRules,
   defaultKioskCategories,
@@ -15,6 +17,8 @@ import {
 import type {
   ActivityEvent,
   ArtworkFile,
+  BankingDetails,
+  EmailSettings,
   CatalogProduct,
   CounterQueueTicket,
   Customer,
@@ -56,6 +60,14 @@ export interface AppState {
   counterQueue: CounterQueueTicket[];
   stockMovements: StockMovement[];
   kioskCategories: KioskCategory[];
+  bankingDetails: BankingDetails;
+  emailSettings: EmailCredentials;
+}
+
+// EmailSettings is the public (sanitized) shape; the server additionally keeps the
+// Gmail app password, which is never sent back to any client.
+export interface EmailCredentials extends EmailSettings {
+  password?: string | undefined;
 }
 
 export interface StaffRecord extends StaffMember {
@@ -195,7 +207,9 @@ const initialState: AppState = {
   ],
   counterQueue: [],
   stockMovements: [],
-  kioskCategories: defaultKioskCategories
+  kioskCategories: defaultKioskCategories,
+  bankingDetails: defaultBankingDetails,
+  emailSettings: { ...defaultEmailSettings }
 };
 
 export const state: AppState = loadState();
@@ -215,6 +229,8 @@ export async function hydratePersistentState() {
     discountRules: remoteState.discountRules?.length ? remoteState.discountRules : state.discountRules,
     inventory: remoteState.inventory?.length ? remoteState.inventory : state.inventory,
     kioskCategories: remoteState.kioskCategories?.length ? remoteState.kioskCategories : state.kioskCategories,
+    bankingDetails: remoteState.bankingDetails ?? state.bankingDetails,
+    emailSettings: remoteState.emailSettings ?? state.emailSettings,
     staff
   });
   remoteHydrated = true;
@@ -743,6 +759,55 @@ export function replaceKioskCategories(categories: KioskCategory[]): KioskCatego
   })).filter((category) => category.id && category.label);
   persistState();
   return state.kioskCategories;
+}
+
+export function replaceBankingDetails(details: { [K in keyof BankingDetails]?: string | undefined }): BankingDetails {
+  const clean = (value: unknown) => String(value ?? "").trim();
+  state.bankingDetails = {
+    bankName: clean(details.bankName),
+    accountName: clean(details.accountName),
+    accountNumber: clean(details.accountNumber),
+    branchCode: clean(details.branchCode),
+    accountType: clean(details.accountType),
+    paymentReference: clean(details.paymentReference)
+  };
+  persistState();
+  return state.bankingDetails;
+}
+
+// Public (safe) view of the email settings — never exposes the stored app password.
+export function publicEmailSettings(settings: EmailCredentials = state.emailSettings): EmailSettings {
+  return {
+    enabled: settings.enabled,
+    provider: "gmail",
+    fromName: settings.fromName,
+    user: settings.user,
+    hasPassword: Boolean(settings.password)
+  };
+}
+
+export function replaceEmailSettings(input: {
+  enabled?: boolean | undefined;
+  fromName?: string | undefined;
+  user?: string | undefined;
+  password?: string | undefined;
+}): EmailSettings {
+  const current = state.emailSettings;
+  // Only overwrite the password when a new non-empty value is supplied, so editing other
+  // fields doesn't wipe the saved app password.
+  const nextPassword = typeof input.password === "string" && input.password.trim().length > 0
+    ? input.password.trim()
+    : current.password;
+  state.emailSettings = {
+    provider: "gmail",
+    enabled: input.enabled ?? current.enabled,
+    fromName: input.fromName !== undefined ? String(input.fromName).trim() : current.fromName,
+    user: input.user !== undefined ? String(input.user).trim() : current.user,
+    hasPassword: Boolean(nextPassword),
+    password: nextPassword
+  };
+  persistState();
+  return publicEmailSettings();
 }
 
 function upsertCustomer(input: { name: string; mobile: string; email?: string | undefined }): Customer {

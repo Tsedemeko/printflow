@@ -225,6 +225,17 @@ insert into kiosk_categories (id, label, description, position) values
   ('promotional', 'Branding & Promo', 'Umbrellas, table cloths, oval boards, and branded gifts.', 2)
 on conflict (id) do nothing;
 
+-- Single-row shop configuration: banking details (shown on invoices) and outbound email.
+create table shop_settings (
+  id text primary key,
+  banking jsonb not null default '{}',
+  email jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+insert into shop_settings (id, banking, email) values ('shop', '{}', '{}')
+on conflict (id) do nothing;
+
 create index orders_status_idx on orders(status);
 create index orders_customer_idx on orders(customer_id);
 create index order_items_batch_idx on order_items(batch_key);

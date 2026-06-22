@@ -1213,11 +1213,35 @@ textarea {
 .invoice-payments { margin-top: 22px; }
 .invoice-foot { border-top: 1px dashed var(--line); margin-top: 22px; padding-top: 14px; }
 
+.invoice-banking {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+.invoice-banking .eyebrow { display: block; margin-bottom: 10px; }
+.invoice-banking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 24px;
+}
+.invoice-banking-grid div { display: flex; justify-content: space-between; gap: 12px; }
+.invoice-banking-grid span { color: var(--muted); }
+
+@page { margin: 14mm; }
+
 @media print {
-  body { background: #fff; }
+  /* Print brand colours and shaded blocks instead of dropping them. */
+  html, body {
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .no-print, .invoice-toolbar { display: none !important; }
   .invoice-page { max-width: none; padding: 0; }
   .invoice-sheet { border: 0; box-shadow: none; padding: 0; }
+  .invoice-banking { break-inside: avoid; }
 }
 
 /* ===== Team workload (manager/supervisor) ===== */

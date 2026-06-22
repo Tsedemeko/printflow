@@ -83,7 +83,9 @@ export const NOTIFICATION_EVENTS = [
   "ready_for_collection",
   "balance_reminder",
   "staff_alert",
-  "daily_management_summary"
+  "daily_management_summary",
+  "invoice_sent",
+  "quotation_sent"
 ] as const;
 
 export const PROOF_STATUSES = [

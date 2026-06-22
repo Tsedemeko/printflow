@@ -1,6 +1,8 @@
 import {
   catalog,
   defaultAccessForRoles,
+  defaultBankingDetails,
+  defaultEmailSettings,
   defaultDepositRules,
   defaultDiscountRules,
   defaultKioskCategories
@@ -8,6 +10,7 @@ import {
 import type {
   ActivityEvent,
   ArtworkFile,
+  BankingDetails,
   CatalogProduct,
   CounterQueueTicket,
   Customer,
@@ -20,7 +23,7 @@ import type {
   StaffMember
 } from "@printflow/shared";
 import type { DiscountRule } from "@printflow/shared";
-import type { AppState, InventoryItem, StaffRecord } from "../store.js";
+import type { AppState, EmailCredentials, InventoryItem, StaffRecord } from "../store.js";
 import { hasSupabaseAdmin, supabaseRest } from "./supabase.js";
 
 type Row = Record<string, unknown>;
@@ -46,7 +49,8 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     notifications,
     staff,
     counterQueue,
-    kioskCategories
+    kioskCategories,
+    shopSettings
   ] = await Promise.all([
     supabaseRest<Row[]>("customers?select=*"),
     supabaseRest<Row[]>("catalog_products?select=*"),
@@ -61,7 +65,8 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     supabaseRest<Row[]>("notification_events?select=*"),
     supabaseRest<Row[]>("profiles?select=*"),
     supabaseRest<Row[]>("counter_queue_tickets?select=*"),
-    supabaseRest<Row[]>("kiosk_categories?select=*&order=position").catch(() => [] as Row[])
+    supabaseRest<Row[]>("kiosk_categories?select=*&order=position").catch(() => [] as Row[]),
+    supabaseRest<Row[]>("shop_settings?select=*&id=eq.shop").catch(() => [] as Row[])
   ]);
 
   const customerModels = customers.map(rowToCustomer);
@@ -85,12 +90,41 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     notifications: notifications.map(rowToNotification),
     staff: staff.map(rowToStaff),
     counterQueue: counterQueue.map(rowToCounterTicket),
-    kioskCategories: kioskCategories.length ? kioskCategories.map(rowToKioskCategory) : defaultKioskCategories
+    kioskCategories: kioskCategories.length ? kioskCategories.map(rowToKioskCategory) : defaultKioskCategories,
+    bankingDetails: rowToBankingDetails(shopSettings[0]),
+    emailSettings: rowToEmailSettings(shopSettings[0])
   };
 }
 
 function rowToKioskCategory(row: Row): KioskCategory {
   return { id: string(row.id), label: string(row.label), description: string(row.description) };
+}
+
+function rowToBankingDetails(row: Row | undefined): BankingDetails {
+  const banking = (row?.banking ?? null) as Partial<BankingDetails> | null;
+  if (!banking) return defaultBankingDetails;
+  return {
+    bankName: string(banking.bankName),
+    accountName: string(banking.accountName),
+    accountNumber: string(banking.accountNumber),
+    branchCode: string(banking.branchCode),
+    accountType: string(banking.accountType),
+    paymentReference: string(banking.paymentReference)
+  };
+}
+
+function rowToEmailSettings(row: Row | undefined): EmailCredentials {
+  const email = (row?.email ?? null) as Partial<EmailCredentials> | null;
+  if (!email) return { ...defaultEmailSettings };
+  const password = optionalString(email.password);
+  return {
+    provider: "gmail",
+    enabled: Boolean(email.enabled),
+    fromName: string(email.fromName) || defaultEmailSettings.fromName,
+    user: string(email.user),
+    hasPassword: Boolean(password),
+    password
+  };
 }
 
 export async function persistSupabaseState(state: AppState): Promise<void> {
@@ -103,7 +137,18 @@ export async function persistSupabaseState(state: AppState): Promise<void> {
     syncTable("inventory_items", state.inventory.map(inventoryItemToRow)),
     syncTable("counter_queue_tickets", state.counterQueue.map(counterTicketToRow)),
     syncTable("profiles", state.staff.map(staffToRow)),
-    syncTable("kiosk_categories", state.kioskCategories.map((category, index) => ({ id: category.id, label: category.label, description: category.description, position: index })))
+    syncTable("kiosk_categories", state.kioskCategories.map((category, index) => ({ id: category.id, label: category.label, description: category.description, position: index }))),
+    syncTable("shop_settings", [{
+      id: "shop",
+      banking: state.bankingDetails,
+      email: {
+        enabled: state.emailSettings.enabled,
+        provider: "gmail",
+        fromName: state.emailSettings.fromName,
+        user: state.emailSettings.user,
+        password: state.emailSettings.password ?? null
+      }
+    }])
   ]);
   await Promise.all([
     syncTable("orders", state.orders.map(orderToRow)),

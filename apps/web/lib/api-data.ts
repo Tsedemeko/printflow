@@ -116,6 +116,24 @@ export async function getKioskCategories(): Promise<KioskCategoryItem[]> {
   return payload?.categories ?? [];
 }
 
+export interface BankingDetailsData {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branchCode: string;
+  accountType: string;
+  paymentReference: string;
+}
+
+const emptyBanking: BankingDetailsData = {
+  bankName: "", accountName: "", accountNumber: "", branchCode: "", accountType: "", paymentReference: ""
+};
+
+export async function getBankingDetails(): Promise<BankingDetailsData> {
+  const payload = await fetchJson<{ banking: BankingDetailsData }>("/settings/banking");
+  return payload?.banking ?? emptyBanking;
+}
+
 export async function getReportMetrics(): Promise<Metrics> {
   const payload = await fetchJson<{ metrics: Metrics }>("/reports/summary");
   return payload?.metrics ?? emptyMetrics;

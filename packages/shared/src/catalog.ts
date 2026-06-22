@@ -514,10 +514,28 @@ export function getProduct(productId: string): CatalogProduct {
   return product;
 }
 
-import type { KioskCategory } from "./types.js";
+import type { BankingDetails, EmailSettings, KioskCategory } from "./types.js";
 
 export const defaultKioskCategories: KioskCategory[] = [
   { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
   { id: "signage", label: "Banners & Signage", description: "X-banners, flag banners, pull-ups, corex boards, gazebos, pop-up walls." },
   { id: "promotional", label: "Branding & Promo", description: "Umbrellas, table cloths, oval boards, and branded gifts." }
 ];
+
+// Shown on invoices/quotations so customers can pay by EFT. Owner edits these in Settings.
+export const defaultBankingDetails: BankingDetails = {
+  bankName: "",
+  accountName: "Finesse Fashion Design Enterprise",
+  accountNumber: "",
+  branchCode: "",
+  accountType: "Cheque / Current",
+  paymentReference: "Use your order number as the payment reference and email proof of payment."
+};
+
+export const defaultEmailSettings: EmailSettings = {
+  enabled: false,
+  provider: "gmail",
+  fromName: "Finesse Fashion Design Enterprise",
+  user: "",
+  hasPassword: false
+};

@@ -32,6 +32,9 @@ import {
   queueNotification,
   recordPayment,
   replaceKioskCategories,
+  replaceBankingDetails,
+  replaceEmailSettings,
+  publicEmailSettings,
   sendProof,
   publicStaff,
   state,
@@ -49,6 +52,8 @@ import { requireAccess, staffFromRequest } from "./services/authz.js";
 import { createPayFastCheckout, createYocoCheckout, verifyYocoWebhook } from "./services/payments.js";
 import { saveArtworkObject } from "./services/storage.js";
 import { hashPassword, issueStaffToken, verifyPassword } from "./services/app-auth.js";
+import { EmailNotConfiguredError, emailIsConfigured, sendEmail } from "./services/email.js";
+import { config } from "./config.js";
 
 const router = Router();
 
@@ -180,6 +185,32 @@ router.put("/kiosk/categories", requireAccess("catalog_pricing"), (req, res) => 
   res.json({ categories: replaceKioskCategories(body.categories) });
 });
 
+// Banking details are public so invoices/quotations can render the EFT block.
+router.get("/settings/banking", (_req, res) => res.json({ banking: state.bankingDetails }));
+router.put("/settings/banking", requireAccess("catalog_pricing"), (req, res) => {
+  const body = z.object({
+    bankName: z.string().optional(),
+    accountName: z.string().optional(),
+    accountNumber: z.string().optional(),
+    branchCode: z.string().optional(),
+    accountType: z.string().optional(),
+    paymentReference: z.string().optional()
+  }).parse(req.body);
+  res.json({ banking: replaceBankingDetails(body) });
+});
+
+// Email settings are owner-managed; the GET never returns the stored app password.
+router.get("/settings/email", requireAccess("catalog_pricing"), (_req, res) => res.json({ email: publicEmailSettings() }));
+router.put("/settings/email", requireAccess("catalog_pricing"), (req, res) => {
+  const body = z.object({
+    enabled: z.boolean().optional(),
+    fromName: z.string().optional(),
+    user: z.string().email("Enter a valid Gmail address").optional().or(z.literal("")),
+    password: z.string().optional()
+  }).parse(req.body);
+  res.json({ email: replaceEmailSettings(body) });
+});
+
 router.get("/catalog/products", (_req, res) => res.json({ products: state.catalog }));
 router.post("/catalog/products", requireAccess("catalog_pricing"), (req, res) => {
   const body = catalogProductSchema.parse(req.body) as CatalogProduct;
@@ -304,6 +335,91 @@ router.delete("/orders/:id", requireAccess("production"), (req, res) => {
 router.post("/orders/:id/status", requireAccess("production"), (req, res) => {
   const status = z.object({ status: z.string() }).parse(req.body).status as OrderStatus;
   res.json({ order: transitionOrder(routeParam(req, "id"), status) });
+});
+
+// Email a customer their invoice (or quotation) through the owner's configured Gmail account.
+router.post("/orders/:id/send-invoice", requireAccess("pos"), async (req, res, next) => {
+  try {
+    const body = z.object({
+      kind: z.enum(["invoice", "quotation"]).default("invoice"),
+      to: z.string().email().optional(),
+      message: z.string().optional()
+    }).parse(req.body);
+
+    const order = findOrder(routeParam(req, "id"));
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    if (!emailIsConfigured(state.emailSettings)) {
+      return res.status(409).json({ error: "Email is not set up yet. Add your Gmail address and app password under Settings → Email." });
+    }
+
+    const recipient = (body.to ?? order.customer.email ?? "").trim();
+    if (!recipient) {
+      return res.status(422).json({ error: "This customer has no email address. Add one to the customer or pass a recipient." });
+    }
+
+    const money = (value: number) => `R${value.toFixed(2)}`;
+    const isQuote = body.kind === "quotation";
+    const docLabel = isQuote ? "Quotation" : "Invoice";
+    const docNumber = `${isQuote ? "QUO" : "INV"}-${order.orderNumber.replace("#", "")}`;
+    const link = `${config.publicWebUrl}/invoice/${order.id}`;
+    const bank = state.bankingDetails;
+    const bankLines = bank.accountNumber
+      ? [
+          "",
+          "Banking details (EFT):",
+          bank.bankName ? `  Bank: ${bank.bankName}` : "",
+          bank.accountName ? `  Account name: ${bank.accountName}` : "",
+          `  Account number: ${bank.accountNumber}`,
+          bank.branchCode ? `  Branch code: ${bank.branchCode}` : "",
+          bank.accountType ? `  Account type: ${bank.accountType}` : "",
+          bank.paymentReference ? `  ${bank.paymentReference}` : ""
+        ].filter(Boolean)
+      : [];
+
+    const lines = [
+      `Good day ${order.customer.name},`,
+      "",
+      body.message?.trim() || `Please find your ${docLabel.toLowerCase()} ${docNumber} from Finesse Fashion Design Enterprise below.`,
+      "",
+      `${docLabel} no: ${docNumber}`,
+      `Order: ${order.orderNumber}`,
+      `Total: ${money(order.total)}`,
+      isQuote ? `Deposit to confirm: ${money(order.requiredDeposit)}` : `Balance due: ${money(order.balanceDue)}`,
+      "",
+      `View / print your ${docLabel.toLowerCase()}: ${link}`,
+      ...bankLines,
+      "",
+      "Thank you for your business.",
+      state.emailSettings.fromName || "Finesse Fashion Design Enterprise"
+    ];
+    const text = lines.join("\n");
+
+    const result = await sendEmail(state.emailSettings, {
+      to: recipient,
+      subject: `${docLabel} ${docNumber} — Finesse Fashion Design Enterprise`,
+      text
+    });
+
+    queueNotification({
+      event: isQuote ? "quotation_sent" : "invoice_sent",
+      channel: "email",
+      recipient,
+      orderId: order.id,
+      customerId: order.customer.id,
+      subject: `${docLabel} ${docNumber}`,
+      message: `${docLabel} emailed to ${recipient}`
+    });
+
+    return res.json({ ok: true, to: recipient, messageId: result.messageId });
+  } catch (error) {
+    if (error instanceof EmailNotConfiguredError) {
+      return res.status(409).json({ error: error.message });
+    }
+    // A delivery failure (wrong app password, Gmail blocked, network) shouldn't 500 — give an actionable message.
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    return res.status(502).json({ error: `Email could not be sent. Check the Gmail address and app password in Settings. (${detail})` });
+  }
 });
 
 router.get("/counter/queue", (_req, res) => res.json({ tickets: getCounterQueue() }));

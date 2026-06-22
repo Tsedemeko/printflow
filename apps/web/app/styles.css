@@ -384,6 +384,13 @@ button.compact,
   gap: 16px;
 }
 
+/* Primary action buttons that sit directly in the grid (e.g. kiosk "Create queue ticket",
+   "Check status") should be centered and content-width, not stretched edge-to-edge. */
+.wizard > button {
+  justify-self: center;
+  min-width: 240px;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;

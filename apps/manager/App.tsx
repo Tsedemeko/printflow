@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   rowBetween: { alignItems: "center", flexDirection: "row", gap: 10, justifyContent: "space-between", paddingVertical: 7 },
   flex1: { flex: 1 },
-  button: { backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  button: { alignSelf: "flex-start", alignItems: "center", backgroundColor: "#0f1f3d", borderRadius: 8, marginTop: 12, minWidth: 180, paddingHorizontal: 20, paddingVertical: 12 },
   buttonText: { color: "#ffffff", fontWeight: "800", textAlign: "center" },
   input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 44, paddingHorizontal: 10 },
   warning: { color: "#b91c1c", fontWeight: "800", marginTop: 10 },

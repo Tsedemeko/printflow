@@ -869,6 +869,8 @@ function decrementInventory(order: Order) {
 }
 
 function loadState(): AppState {
+  // With a database configured, never read a (possibly stale) local file — hydrate from the DB instead.
+  if (remotePersistenceEnabled()) return structuredClone(initialState);
   if (!existsSync(dataFile)) return structuredClone(initialState);
   try {
     const parsed = JSON.parse(readFileSync(dataFile, "utf8")) as AppState;
@@ -891,13 +893,18 @@ function loadState(): AppState {
 }
 
 function persistState() {
+  // When a database is configured it is the single source of truth — never keep a local copy.
+  if (remotePersistenceEnabled()) {
+    if (remoteHydrated) {
+      void persistSupabaseState(state).catch((error) => {
+        console.error("Supabase persistence failed", error);
+      });
+    }
+    return;
+  }
+  // No database configured: fall back to local disk so a dev/offline setup keeps its data.
   mkdirSync(dirname(dataFile), { recursive: true });
   writeFileSync(dataFile, JSON.stringify(state, null, 2));
-  if (remoteHydrated) {
-    void persistSupabaseState(state).catch((error) => {
-      console.error("Supabase persistence failed", error);
-    });
-  }
 }
 
 function bootstrapOwnerStaff(staff: StaffRecord[]): StaffRecord[] {

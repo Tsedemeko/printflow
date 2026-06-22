@@ -440,7 +440,18 @@ function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise
 }
 
 function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<void> }) {
-  const order = orders.find((item) => item.status === "ready_for_collection") ?? orders[0];
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
+  // Cashier serves the customer in front of them: pick a specific order, else default to the
+  // next one ready for collection (then any with a balance).
+  const withBalance = orders.filter((item) => item.balanceDue > 0 && item.status !== "cancelled");
+  const order = orders.find((item) => item.id === pickedId)
+    ?? withBalance.find((item) => item.status === "ready_for_collection")
+    ?? withBalance[0]
+    ?? orders[0];
+  const orderMatches = orderSearch.trim()
+    ? orders.filter((item) => `${item.orderNumber} ${item.customer.name} ${item.customer.mobile}`.toLowerCase().includes(orderSearch.toLowerCase())).slice(0, 6)
+    : [];
   const [inventory, setInventory] = useState<{ id: string; sku: string; name: string; quantityOnHand: number }[]>([]);
   const [search, setSearch] = useState("");
   const [selectedItem, setSelectedItem] = useState<{ id: string; sku: string; name: string; quantityOnHand: number } | null>(null);
@@ -527,7 +538,23 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
       <Text style={styles.eyebrow}>Point of sale</Text>
       <Text style={styles.title}>Payments and quick sale</Text>
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Settle order {order?.orderNumber ?? ""}</Text>
+        <Text style={styles.panelTitle}>Find the customer's order</Text>
+        <TextInput
+          style={styles.input}
+          value={orderSearch}
+          onChangeText={setOrderSearch}
+          placeholder="Search by order number, name, or mobile"
+          autoCapitalize="none"
+        />
+        {orderMatches.map((match) => (
+          <Pressable key={match.id} style={styles.secondaryButton} onPress={() => { setPickedId(match.id); setOrderSearch(""); }}>
+            <Text style={styles.secondaryButtonText}>{match.orderNumber} · {match.customer.name} · R{match.balanceDue.toFixed(2)}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Settle order {order?.orderNumber ?? ""}{order ? ` · ${order.customer.name}` : ""}</Text>
         <Text style={styles.big}>R{(order?.balanceDue ?? 0).toFixed(2)}</Text>
         {order ? (
           <Text style={styles.muted}>

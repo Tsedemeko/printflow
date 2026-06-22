@@ -1,6 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { config } from "../config.js";
+
+// Honor an absolute PRINTFLOW_DATA_DIR (e.g. a Render disk mount); otherwise resolve from cwd.
+const dataRoot = isAbsolute(config.dataDir) ? config.dataDir : join(process.cwd(), config.dataDir);
 
 export interface StoredObject {
   storagePath: string;
@@ -35,7 +38,7 @@ export async function saveArtworkObject(input: { storagePath: string; mimeType: 
     };
   }
 
-  const target = join(process.cwd(), config.dataDir, "storage", input.storagePath);
+  const target = join(dataRoot, "storage", input.storagePath);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, bytes);
   return { storagePath: input.storagePath, provider: "local" };

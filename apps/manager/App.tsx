@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { statusLabel, workflowColumns } from "@printflow/shared";
 import type { Order, StaffRole } from "@printflow/shared";
@@ -7,7 +7,7 @@ import type { Order, StaffRole } from "@printflow/shared";
 // Keep the native splash visible until the first screen has painted (no white flash).
 void SplashScreen.preventAutoHideAsync();
 
-type Tab = "overview" | "orders" | "payments" | "team" | "stock";
+type Tab = "overview" | "orders" | "payments" | "team" | "stock" | "settings";
 type Staff = { id?: string | undefined; name: string; roles: StaffRole[]; token?: string | undefined };
 type RosterMember = { id: string; name: string; role: string; roles: string[] };
 type InventoryItem = { id: string; sku: string; name: string; quantityOnHand: number; reorderPoint: number };
@@ -20,12 +20,48 @@ type Metrics = { totalSales: number; activeOrders: number; averageOrderValue: nu
 type BoardColumn = { status: string; label: string; orders: Order[] };
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onrender.com";
+const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "https://finesse-web.vercel.app";
 const ACTIVE = ["new", "awaiting_artwork", "design_review", "approved", "in_production", "quality_check"];
 let accessToken = "";
 
 function headers(roles: StaffRole[], json = true): Record<string, string> {
   const base: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
   return accessToken ? { ...base, Authorization: `Bearer ${accessToken}` } : { ...base, "x-staff-roles": roles.join(",") };
+}
+
+function waNumber(mobile?: string): string {
+  const digits = (mobile ?? "").replace(/[^\d]/g, "");
+  if (digits.startsWith("27")) return digits;
+  if (digits.startsWith("0")) return `27${digits.slice(1)}`;
+  return digits;
+}
+
+// Open WhatsApp to the customer with an invoice/quotation link.
+async function shareDocWhatsApp(order: Order, kind: "invoice" | "quotation") {
+  const label = kind === "quotation" ? "Quotation" : "Invoice";
+  const path = kind === "quotation" ? "quote" : "invoice";
+  const msg = `${label} ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/${path}/${order.id}`;
+  const url = `whatsapp://send?phone=${waNumber(order.customer.mobile)}&text=${encodeURIComponent(msg)}`;
+  const supported = await Linking.canOpenURL(url);
+  await Linking.openURL(supported ? url : `https://wa.me/${waNumber(order.customer.mobile)}?text=${encodeURIComponent(msg)}`);
+}
+
+// Email an invoice/quotation to the customer via the API (owner's Gmail).
+async function emailDoc(order: Order, kind: "invoice" | "quotation"): Promise<string> {
+  try {
+    const response = await fetch(`${apiUrl}/orders/${order.id}/send-invoice`, {
+      method: "POST",
+      headers: headers(["cashier"]),
+      body: JSON.stringify({ kind })
+    });
+    const data = await response.json().catch(() => ({})) as { to?: string; error?: string };
+    if (response.ok) return `Emailed to ${data.to ?? "customer"}`;
+    if (response.status === 409) return "Set up email in Settings first";
+    if (response.status === 422) return "Customer has no email on file";
+    return data.error ?? "Could not send";
+  } catch {
+    return "Could not reach server";
+  }
 }
 
 export default function App() {
@@ -153,7 +189,7 @@ export default function App() {
       ) : null}
       {staff ? (
         <View style={[styles.tabs, { paddingHorizontal: sidePad }]}>
-          {(["overview", "orders", "payments", "team", "stock"] as Tab[]).map((item) => (
+          {(["overview", "orders", "payments", "team", "stock", "settings"] as Tab[]).map((item) => (
             <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
               <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item.toUpperCase()}</Text>
             </Pressable>
@@ -171,6 +207,7 @@ export default function App() {
         {staff && tab === "payments" ? <Payments orders={orders} metrics={metrics} /> : null}
         {staff && tab === "team" ? <Team orders={orders} roster={roster} error={rosterError} onAdd={addStaff} onDeactivate={deactivateStaff} /> : null}
         {staff && tab === "stock" ? <Stock inventory={inventory} movements={movements} onMove={moveStock} /> : null}
+        {staff && tab === "settings" ? <Settings /> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -294,8 +331,10 @@ function Orders({ orders, roster, onAdvance, onAssign, onRush }: {
   onRush: (orderId: string, rush: boolean) => Promise<void>;
 }) {
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [docNote, setDocNote] = useState<Record<string, string>>({});
   const done = ["completed", "cancelled"];
   const active = orders.filter((order) => !done.includes(order.status));
+  const note = (orderId: string, text: string) => setDocNote((prev) => ({ ...prev, [orderId]: text }));
   const nameFor = (id?: string) => roster.find((member) => member.id === id)?.name ?? "Unassigned";
   const nextStatus = (status: string) => {
     const index = workflowColumns.findIndex((column) => column.status === status);
@@ -323,6 +362,12 @@ function Orders({ orders, roster, onAdvance, onAssign, onRush }: {
               <Pressable style={styles.shareBtn} onPress={() => setAssigning(assigning === order.id ? null : order.id)}><Text style={styles.chipText}>Assign</Text></Pressable>
               <Pressable style={styles.shareBtn} onPress={() => void onRush(order.id, !order.rush)}><Text style={styles.chipText}>{order.rush ? "Unrush" : "Rush"}</Text></Pressable>
             </View>
+            <View style={styles.row}>
+              <Pressable style={styles.shareBtn} onPress={() => { note(order.id, "Opening WhatsApp…"); void shareDocWhatsApp(order, "invoice").then(() => note(order.id, "")); }}><Text style={styles.chipText}>WhatsApp invoice</Text></Pressable>
+              <Pressable style={styles.shareBtn} onPress={() => { note(order.id, "Sending…"); void emailDoc(order, "invoice").then((m) => note(order.id, m)); }}><Text style={styles.chipText}>Email invoice</Text></Pressable>
+              <Pressable style={styles.shareBtn} onPress={() => { note(order.id, "Sending…"); void emailDoc(order, "quotation").then((m) => note(order.id, m)); }}><Text style={styles.chipText}>Email quote</Text></Pressable>
+            </View>
+            {docNote[order.id] ? <Text style={styles.muted}>{docNote[order.id]}</Text> : null}
 
             {assigning === order.id && roster.length ? (
               <View style={styles.row}>
@@ -556,6 +601,88 @@ function Kpi({ label, value }: { label: string; value: string }) {
     <View style={styles.kpi}>
       <Text style={styles.kpiLabel}>{label}</Text>
       <Text style={styles.kpiValue}>{value}</Text>
+    </View>
+  );
+}
+
+type Banking = { bankName: string; accountName: string; accountNumber: string; branchCode: string; accountType: string; paymentReference: string };
+const EMPTY_BANKING: Banking = { bankName: "", accountName: "", accountNumber: "", branchCode: "", accountType: "", paymentReference: "" };
+
+function Settings() {
+  const [banking, setBanking] = useState<Banking>(EMPTY_BANKING);
+  const [bankNote, setBankNote] = useState("");
+  const [email, setEmail] = useState<{ enabled: boolean; fromName: string; user: string; hasPassword: boolean }>({ enabled: false, fromName: "", user: "", hasPassword: false });
+  const [password, setPassword] = useState("");
+  const [emailNote, setEmailNote] = useState("");
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const b = await fetch(`${apiUrl}/settings/banking`).then((r) => r.json()).catch(() => null) as { banking?: Banking } | null;
+        if (b?.banking) setBanking({ ...EMPTY_BANKING, ...b.banking });
+        const e = await fetch(`${apiUrl}/settings/email`, { headers: headers(["manager"], false) }).then((r) => r.ok ? r.json() : null).catch(() => null) as { email?: typeof email } | null;
+        if (e?.email) setEmail(e.email);
+      } catch { /* keep defaults */ }
+    })();
+  }, []);
+
+  async function saveBanking() {
+    setBankNote("Saving…");
+    try {
+      const r = await fetch(`${apiUrl}/settings/banking`, { method: "PUT", headers: headers(["manager"]), body: JSON.stringify(banking) });
+      setBankNote(r.ok ? "Saved — now on invoices." : "Could not save (owner/manager only).");
+    } catch { setBankNote("Could not reach server."); }
+  }
+
+  async function saveEmail() {
+    setEmailNote("Saving…");
+    try {
+      const body: Record<string, unknown> = { enabled: email.enabled, fromName: email.fromName, user: email.user };
+      if (password.trim()) body.password = password.trim();
+      const r = await fetch(`${apiUrl}/settings/email`, { method: "PUT", headers: headers(["manager"]), body: JSON.stringify(body) });
+      if (r.ok) { const data = await r.json() as { email: typeof email }; setEmail(data.email); setPassword(""); setEmailNote("Saved."); }
+      else setEmailNote("Could not save (owner/manager only).");
+    } catch { setEmailNote("Could not reach server."); }
+  }
+
+  const field = (label: string, key: keyof Banking, placeholder = "") => (
+    <View key={key}>
+      <Text style={styles.muted}>{label}</Text>
+      <TextInput style={styles.input} value={banking[key]} placeholder={placeholder} onChangeText={(t) => setBanking((p) => ({ ...p, [key]: t }))} />
+    </View>
+  );
+
+  return (
+    <View>
+      <Text style={styles.eyebrow}>Configuration</Text>
+      <Text style={styles.title}>Settings</Text>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Banking details (on invoices)</Text>
+        <Text style={styles.muted}>Shown on every invoice/quotation so customers can pay by EFT. Leave account number blank to hide it.</Text>
+        {field("Bank", "bankName", "e.g. FNB")}
+        {field("Account name", "accountName", "Finesse Fashion Design Enterprise")}
+        {field("Account number", "accountNumber", "62XXXXXXXXX")}
+        {field("Branch code", "branchCode", "250655")}
+        {field("Account type", "accountType", "Cheque / Current")}
+        {field("Payment instruction", "paymentReference", "Use your order number as the reference.")}
+        <Pressable style={styles.button} onPress={() => void saveBanking()}><Text style={styles.buttonText}>Save banking details</Text></Pressable>
+        {bankNote ? <Text style={styles.muted}>{bankNote}</Text> : null}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Email (send invoices from your Gmail)</Text>
+        <Text style={styles.muted}>Google Account → Security → 2-Step Verification → App passwords → create one for &ldquo;Mail&rdquo; and paste it below. It is hidden after saving.</Text>
+        <Text style={styles.muted}>From name</Text>
+        <TextInput style={styles.input} value={email.fromName} placeholder="Finesse Fashion Design Enterprise" onChangeText={(t) => setEmail((p) => ({ ...p, fromName: t }))} />
+        <Text style={styles.muted}>Gmail address</Text>
+        <TextInput style={styles.input} value={email.user} autoCapitalize="none" keyboardType="email-address" placeholder="finesse@gmail.com" onChangeText={(t) => setEmail((p) => ({ ...p, user: t }))} />
+        <Text style={styles.muted}>App password {email.hasPassword ? "(saved — leave blank to keep)" : ""}</Text>
+        <TextInput style={styles.input} value={password} secureTextEntry placeholder={email.hasPassword ? "••••••••••••••••" : "16-character app password"} onChangeText={setPassword} />
+        <Pressable style={styles.shareBtn} onPress={() => setEmail((p) => ({ ...p, enabled: !p.enabled }))}><Text style={styles.chipText}>{email.enabled ? "✓ Sending enabled" : "Enable sending"}</Text></Pressable>
+        <Pressable style={styles.button} onPress={() => void saveEmail()}><Text style={styles.buttonText}>Save email settings</Text></Pressable>
+        {emailNote ? <Text style={styles.muted}>{emailNote}</Text> : null}
+      </View>
     </View>
   );
 }

@@ -10,6 +10,9 @@ export const config = {
   dataDir: process.env.PRINTFLOW_DATA_DIR ?? "data",
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  // Direct Postgres connection (Supabase → Settings → Database → Connection string).
+  // When set, the API creates/updates its own tables on boot — no manual SQL needed.
+  databaseUrl: process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? "",
   supabaseArtworkBucket: process.env.SUPABASE_STORAGE_BUCKET_ARTWORK ?? "artwork",
   supabaseProofsBucket: process.env.SUPABASE_STORAGE_BUCKET_PROOFS ?? "proofs",
   emailProvider: process.env.EMAIL_PROVIDER ?? "local",

@@ -362,7 +362,7 @@ router.post("/orders/:id/send-invoice", requireAccess("pos"), async (req, res, n
     const isQuote = body.kind === "quotation";
     const docLabel = isQuote ? "Quotation" : "Invoice";
     const docNumber = `${isQuote ? "QUO" : "INV"}-${order.orderNumber.replace("#", "")}`;
-    const link = `${config.publicWebUrl}/invoice/${order.id}`;
+    const link = `${config.publicWebUrl}/${isQuote ? "quote" : "invoice"}/${order.id}`;
     const bank = state.bankingDetails;
     const bankLines = bank.accountNumber
       ? [

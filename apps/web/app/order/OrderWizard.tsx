@@ -14,11 +14,13 @@ export function OrderWizard() {
   const [lines, setLines] = useState([{ id: "line-1", quantity: 1, selectedOptions: firstOptions(products[0] ?? catalog[0]!) }]);
   const [customer, setCustomer] = useState({ name: "", mobile: "", email: "" });
   const [caption, setCaption] = useState("");
-  const [result, setResult] = useState<{ id: string; orderNumber: string; message: string } | null>(null);
+  const [result, setResult] = useState<{ id: string; orderNumber: string; message: string; artworkAttached: boolean } | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [artworkFile, setArtworkFile] = useState<File | null>(null);
+  const [placement, setPlacement] = useState("");
   const product = products.find((item) => item.id === productId) ?? products[0] ?? catalog[0]!;
   const quoteInputs = useMemo(() => lines.filter((line) => line.quantity > 0).map((line) => ({ productId, quantity: line.quantity, selectedOptions: line.selectedOptions })), [lines, productId]);
   const quote = useMemo(() => priceQuote(quoteInputs, undefined, products), [quoteInputs, products]);
@@ -69,6 +71,8 @@ export function OrderWizard() {
   }
 
   const onCaption = useCallback((value: string) => setCaption(value), []);
+  const onArtwork = useCallback((file: File | null) => setArtworkFile(file), []);
+  const onPlacement = useCallback((value: string) => setPlacement(value), []);
 
   function chooseProduct(nextProductId: string) {
     const nextProduct = products.find((item) => item.id === nextProductId) ?? product;
@@ -93,8 +97,10 @@ export function OrderWizard() {
     setError("");
     setSubmitting(intent);
     try {
-      const items = quoteInputs.map((item, index) => index === 0 && caption
-        ? { ...item, specialInstructions: `Design caption: ${caption}` }
+      // Fold the design caption + chosen artwork placement into the first line's instructions.
+      const instructionParts = [caption ? `Design caption: ${caption}` : "", placement ? `Artwork placement: ${placement}` : ""].filter(Boolean);
+      const items = quoteInputs.map((item, index) => index === 0 && instructionParts.length
+        ? { ...item, specialInstructions: instructionParts.join(" · ") }
         : item);
       const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
@@ -107,6 +113,23 @@ export function OrderWizard() {
       }
       const payload = await response.json() as { order?: { id: string; orderNumber: string } };
       if (!payload.order?.id) throw new Error("The server did not return an order. Please try again.");
+
+      // If the customer already added artwork in the live mock-up, attach it now so they
+      // don't need the upload link/QR afterwards.
+      let artworkAttached = false;
+      if (artworkFile) {
+        try {
+          const fileBase64 = await fileToBase64(artworkFile);
+          const artResponse = await fetch(`${apiUrl}/artwork/${payload.order.id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: artworkFile.name, mimeType: artworkFile.type || "image/png", uploadedBy: "customer", fileBase64 })
+          });
+          artworkAttached = artResponse.ok;
+        } catch {
+          artworkAttached = false;
+        }
+      }
       clearDraft();
 
       if (intent === "yoco") {
@@ -130,7 +153,9 @@ export function OrderWizard() {
       setResult({
         id: payload.order.id,
         orderNumber: payload.order.orderNumber,
-        message: intent === "payfast" ? "Order created and PayFast checkout prepared."
+        artworkAttached,
+        message: artworkAttached ? "Order created and your artwork is attached."
+          : intent === "payfast" ? "Order created and PayFast checkout prepared."
           : intent === "yoco" ? "Order created. Yoco checkout could not start — use the artwork link or try again."
           : intent === "upload" ? "Order created and secure artwork link is ready." : "Order created."
       });
@@ -191,7 +216,7 @@ export function OrderWizard() {
       </section>
       <div className="quote">
         <div className="quote-layout">
-          <DesignStudio category={product?.category ?? "apparel"} onCaptionChange={onCaption} />
+          <DesignStudio category={product?.category ?? "apparel"} onCaptionChange={onCaption} onArtworkChange={onArtwork} onPlacementChange={onPlacement} />
           <div>
             <h3>{product?.name}</h3>
             <p>{product?.description}</p>
@@ -210,6 +235,10 @@ export function OrderWizard() {
               <div className="quote-result">
                 <strong>{result.orderNumber}</strong>
                 <span>{result.message}</span>
+                {result.artworkAttached ? (
+                  <span className="muted-note">✓ Artwork attached — no upload needed.</span>
+                ) : (
+                <>
                 <a href={`/upload/${result.id}`}>Open artwork link</a>
                 {typeof window !== "undefined" ? (
                   <div className="qr-block">
@@ -219,6 +248,8 @@ export function OrderWizard() {
                     <span className="muted-note">Scan to upload artwork from your phone</span>
                   </div>
                 ) : null}
+                </>
+                )}
               </div>
             ) : null}
           </div>
@@ -230,4 +261,17 @@ export function OrderWizard() {
 
 function firstOptions(product: CatalogProduct): Record<string, string> {
   return Object.fromEntries(Object.entries(product.options).map(([group, options]) => [group, options[0]?.id ?? ""]));
+}
+
+// Read a File into base64 (without the data: prefix) for the artwork upload endpoint.
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
 }

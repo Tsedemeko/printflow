@@ -28,6 +28,11 @@ services:
       #   sync: false
       # - key: SUPABASE_SERVICE_ROLE_KEY
       #   sync: false
+      # Direct Postgres connection (Supabase → Settings → Database → Connection string,
+      # use the URI form). When set, the API auto-creates its own tables on boot — no
+      # manual SQL. Required for banking/email settings to persist.
+      # - key: SUPABASE_DB_URL
+      #   sync: false
       # - key: PAYFAST_MERCHANT_ID
       #   sync: false
       # - key: PAYFAST_MERCHANT_KEY

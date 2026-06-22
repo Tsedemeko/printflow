@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
 import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
@@ -14,11 +14,44 @@ const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://finesse-api-ogyt.onre
 const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "https://finesse-web.vercel.app";
 let staffAccessToken = "";
 
+function invoiceMessage(order: Order) {
+  return `Invoice ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/invoice/${order.id}`;
+}
+
 async function shareInvoice(order: Order) {
-  await Share.share({
-    title: `Invoice ${order.orderNumber}`,
-    message: `Invoice ${order.orderNumber} — Finesse Fashion Design Enterprise\nTotal R${order.total.toFixed(2)} · Balance R${order.balanceDue.toFixed(2)}\n${webUrl}/invoice/${order.id}`
-  });
+  await Share.share({ title: `Invoice ${order.orderNumber}`, message: invoiceMessage(order) });
+}
+
+function waNumber(mobile?: string): string {
+  const digits = (mobile ?? "").replace(/[^\d]/g, "");
+  if (digits.startsWith("27")) return digits;
+  if (digits.startsWith("0")) return `27${digits.slice(1)}`;
+  return digits;
+}
+
+async function whatsappInvoice(order: Order) {
+  const msg = invoiceMessage(order);
+  const deep = `whatsapp://send?phone=${waNumber(order.customer.mobile)}&text=${encodeURIComponent(msg)}`;
+  const supported = await Linking.canOpenURL(deep).catch(() => false);
+  await Linking.openURL(supported ? deep : `https://wa.me/${waNumber(order.customer.mobile)}?text=${encodeURIComponent(msg)}`);
+}
+
+// Email the invoice to the customer through the owner's configured Gmail (via the API).
+async function emailInvoice(order: Order): Promise<string> {
+  try {
+    const response = await fetch(`${apiUrl}/orders/${order.id}/send-invoice`, {
+      method: "POST",
+      headers: staffHeaders(["cashier"]),
+      body: JSON.stringify({ kind: "invoice" })
+    });
+    const data = await response.json().catch(() => ({})) as { to?: string; error?: string };
+    if (response.ok) return `Emailed to ${data.to ?? "customer"}`;
+    if (response.status === 409) return "Set up email in Settings first";
+    if (response.status === 422) return "Customer has no email on file";
+    return data.error ?? "Could not send";
+  } catch {
+    return "Could not reach server";
+  }
 }
 
 export default function App() {
@@ -309,8 +342,14 @@ function MyWork({ orders, staff, onRefresh }: { orders: Order[]; staff: Staff; o
                         <Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text>
                       </Pressable>
                     ) : null}
+                    <Pressable style={styles.secondaryButton} onPress={() => void whatsappInvoice(order)}>
+                      <Text style={styles.secondaryButtonText}>WhatsApp</Text>
+                    </Pressable>
+                    <Pressable style={styles.secondaryButton} onPress={() => void emailInvoice(order).then((m) => Alert.alert("Invoice", m))}>
+                      <Text style={styles.secondaryButtonText}>Email</Text>
+                    </Pressable>
                     <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
-                      <Text style={styles.secondaryButtonText}>Share invoice</Text>
+                      <Text style={styles.secondaryButtonText}>Share</Text>
                     </Pressable>
                   </View>
                 </>
@@ -462,9 +501,17 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
         </View>
         {message ? <Text style={styles.warning}>{message}</Text> : null}
         {order ? (
-          <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
-            <Text style={styles.secondaryButtonText}>Share invoice</Text>
-          </Pressable>
+          <View style={styles.row}>
+            <Pressable style={styles.secondaryButton} onPress={() => void whatsappInvoice(order)}>
+              <Text style={styles.secondaryButtonText}>WhatsApp</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => void emailInvoice(order).then((m) => Alert.alert("Invoice", m))}>
+              <Text style={styles.secondaryButtonText}>Email</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => void shareInvoice(order)}>
+              <Text style={styles.secondaryButtonText}>Share</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
       <Pressable style={styles.secondaryButton} onPress={() => setShowQuick((value) => !value)}>

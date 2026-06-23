@@ -668,6 +668,9 @@ function Settings() {
   const [email, setEmail] = useState<{ enabled: boolean; fromName: string; user: string; hasPassword: boolean }>({ enabled: false, fromName: "", user: "", hasPassword: false });
   const [password, setPassword] = useState("");
   const [emailNote, setEmailNote] = useState("");
+  const [sms, setSms] = useState<{ enabled: boolean; baseUrl: string; sender: string; hasApiKey: boolean }>({ enabled: false, baseUrl: "", sender: "", hasApiKey: false });
+  const [apiKey, setApiKey] = useState("");
+  const [smsNote, setSmsNote] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -676,6 +679,8 @@ function Settings() {
         if (b?.banking) setBanking({ ...EMPTY_BANKING, ...b.banking });
         const e = await fetch(`${apiUrl}/settings/email`, { headers: headers(["manager"], false) }).then((r) => r.ok ? r.json() : null).catch(() => null) as { email?: typeof email } | null;
         if (e?.email) setEmail(e.email);
+        const s = await fetch(`${apiUrl}/settings/sms`, { headers: headers(["manager"], false) }).then((r) => r.ok ? r.json() : null).catch(() => null) as { sms?: typeof sms } | null;
+        if (s?.sms) setSms(s.sms);
       } catch { /* keep defaults */ }
     })();
   }, []);
@@ -697,6 +702,17 @@ function Settings() {
       if (r.ok) { const data = await r.json() as { email: typeof email }; setEmail(data.email); setPassword(""); setEmailNote("Saved."); }
       else setEmailNote("Could not save (owner/manager only).");
     } catch { setEmailNote("Could not reach server."); }
+  }
+
+  async function saveSms() {
+    setSmsNote("Saving…");
+    try {
+      const body: Record<string, unknown> = { enabled: sms.enabled, baseUrl: sms.baseUrl, sender: sms.sender };
+      if (apiKey.trim()) body.apiKey = apiKey.trim();
+      const r = await fetch(`${apiUrl}/settings/sms`, { method: "PUT", headers: headers(["manager"]), body: JSON.stringify(body) });
+      if (r.ok) { const data = await r.json() as { sms: typeof sms }; setSms(data.sms); setApiKey(""); setSmsNote("Saved."); }
+      else setSmsNote("Could not save (owner/manager only).");
+    } catch { setSmsNote("Could not reach server."); }
   }
 
   const field = (label: string, key: keyof Banking, placeholder = "") => (
@@ -736,6 +752,20 @@ function Settings() {
         <Pressable style={styles.shareBtn} onPress={() => setEmail((p) => ({ ...p, enabled: !p.enabled }))}><Text style={styles.chipText}>{email.enabled ? "✓ Sending enabled" : "Enable sending"}</Text></Pressable>
         <Pressable style={styles.button} onPress={() => void saveEmail()}><Text style={styles.buttonText}>Save email settings</Text></Pressable>
         {emailNote ? <Text style={styles.muted}>{emailNote}</Text> : null}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>SMS (customer texts via Infobip)</Text>
+        <Text style={styles.muted}>Texts queue tickets, receipts, and ready-for-collection updates. Get the API key and Base URL from your Infobip dashboard. The key is hidden after saving.</Text>
+        <Text style={styles.muted}>Base URL</Text>
+        <TextInput style={styles.input} value={sms.baseUrl} autoCapitalize="none" placeholder="xxxxx.api.infobip.com" onChangeText={(t) => setSms((p) => ({ ...p, baseUrl: t }))} />
+        <Text style={styles.muted}>Sender ID</Text>
+        <TextInput style={styles.input} value={sms.sender} placeholder="Finesse" onChangeText={(t) => setSms((p) => ({ ...p, sender: t }))} />
+        <Text style={styles.muted}>API key {sms.hasApiKey ? "(saved — leave blank to keep)" : ""}</Text>
+        <TextInput style={styles.input} value={apiKey} secureTextEntry placeholder={sms.hasApiKey ? "••••••••••••" : "Infobip API key"} onChangeText={setApiKey} />
+        <Pressable style={styles.shareBtn} onPress={() => setSms((p) => ({ ...p, enabled: !p.enabled }))}><Text style={styles.chipText}>{sms.enabled ? "✓ Sending enabled" : "Enable sending"}</Text></Pressable>
+        <Pressable style={styles.button} onPress={() => void saveSms()}><Text style={styles.buttonText}>Save SMS settings</Text></Pressable>
+        {smsNote ? <Text style={styles.muted}>{smsNote}</Text> : null}
       </View>
     </View>
   );

@@ -207,6 +207,18 @@ export interface BankingDetails {
   paymentReference: string;
 }
 
+// Owner-configured outbound SMS via Infobip. apiKey is write-only (never returned to clients).
+export interface SmsSettings {
+  enabled: boolean;
+  provider: "infobip";
+  // Account base host, e.g. "xxxxx.api.infobip.com" (from the Infobip dashboard).
+  baseUrl: string;
+  // Sender ID / from number shown to the customer.
+  sender: string;
+  // True when an API key is stored on the server.
+  hasApiKey: boolean;
+}
+
 // Owner-configured outbound email. We send through their own Gmail using an App Password
 // (Google Account → Security → 2-Step Verification → App passwords), so invoices come
 // from the shop's real address. The password is write-only — never returned to the client.

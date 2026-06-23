@@ -230,10 +230,11 @@ create table shop_settings (
   id text primary key,
   banking jsonb not null default '{}',
   email jsonb not null default '{}',
+  sms jsonb not null default '{}',
   updated_at timestamptz not null default now()
 );
 
-insert into shop_settings (id, banking, email) values ('shop', '{}', '{}')
+insert into shop_settings (id, banking, email, sms) values ('shop', '{}', '{}', '{}')
 on conflict (id) do nothing;
 
 create index orders_status_idx on orders(status);

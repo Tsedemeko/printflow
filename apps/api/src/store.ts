@@ -4,6 +4,7 @@ import {
   customerOrderCreated,
   defaultBankingDetails,
   defaultEmailSettings,
+  defaultSmsSettings,
   defaultDepositRules,
   defaultDiscountRules,
   defaultKioskCategories,
@@ -19,6 +20,7 @@ import type {
   ArtworkFile,
   BankingDetails,
   EmailSettings,
+  SmsSettings,
   CatalogProduct,
   CounterQueueTicket,
   Customer,
@@ -39,6 +41,8 @@ import { dirname, isAbsolute, join } from "node:path";
 import { config } from "./config.js";
 import { loadSupabaseState, persistSupabaseState, remotePersistenceEnabled } from "./services/persistence.js";
 import { hashPassword } from "./services/app-auth.js";
+import { sendSms, smsIsConfigured } from "./services/sms.js";
+import { sendEmail, emailIsConfigured } from "./services/email.js";
 
 export interface CreateOrderInput {
   source: Order["source"];
@@ -62,12 +66,18 @@ export interface AppState {
   kioskCategories: KioskCategory[];
   bankingDetails: BankingDetails;
   emailSettings: EmailCredentials;
+  smsSettings: SmsCredentials;
 }
 
 // EmailSettings is the public (sanitized) shape; the server additionally keeps the
 // Gmail app password, which is never sent back to any client.
 export interface EmailCredentials extends EmailSettings {
   password?: string | undefined;
+}
+
+// SmsSettings is the public (sanitized) shape; the server also keeps the Infobip API key.
+export interface SmsCredentials extends SmsSettings {
+  apiKey?: string | undefined;
 }
 
 export interface StaffRecord extends StaffMember {
@@ -106,6 +116,13 @@ export interface StockActor {
 }
 
 const now = () => new Date().toISOString();
+
+// Customer-facing milestones we actually send (SMS/email). Internal/staff events stay logged only,
+// so customers aren't spammed on every micro status change. (Declared early — used during seed init.)
+const SENDABLE_EVENTS = new Set([
+  "pre_order_created", "order_confirmed", "payment_received", "design_proof_sent",
+  "ready_for_collection", "balance_reminder", "invoice_sent", "quotation_sent"
+]);
 // Honor an absolute PRINTFLOW_DATA_DIR (e.g. a Render disk mount at /var/data); otherwise resolve from cwd.
 const dataDir = isAbsolute(config.dataDir) ? config.dataDir : join(process.cwd(), config.dataDir);
 const dataFile = join(dataDir, "printflow.local.json");
@@ -209,7 +226,8 @@ const initialState: AppState = {
   stockMovements: [],
   kioskCategories: defaultKioskCategories,
   bankingDetails: defaultBankingDetails,
-  emailSettings: { ...defaultEmailSettings }
+  emailSettings: { ...defaultEmailSettings },
+  smsSettings: { ...defaultSmsSettings }
 };
 
 export const state: AppState = loadState();
@@ -231,6 +249,7 @@ export async function hydratePersistentState() {
     kioskCategories: remoteState.kioskCategories?.length ? remoteState.kioskCategories : state.kioskCategories,
     bankingDetails: remoteState.bankingDetails ?? state.bankingDetails,
     emailSettings: remoteState.emailSettings ?? state.emailSettings,
+    smsSettings: remoteState.smsSettings ?? state.smsSettings,
     staff
   });
   remoteHydrated = true;
@@ -248,8 +267,9 @@ export function createOrder(input: CreateOrderInput): Order {
   const quote = priceQuote(input.items, state.discountRules, state.catalog);
   const deposit = calculateRequiredDeposit(quote.total, quote.items, state.depositRules);
   const status: OrderStatus = quote.items.some((item) => item.category !== "quick_sale") ? "awaiting_artwork" : "new";
-  // Online orders with a required deposit are held off the production floor until the deposit clears.
-  const awaitingPayment = input.source === "online" && deposit.amount > 0;
+  // Any order with a required deposit is held off the production floor until the deposit clears
+  // (online: paid online; walk-in/kiosk: paid at the counter/POS). Quick sales are settled on the spot.
+  const awaitingPayment = input.source !== "quick_sale" && deposit.amount > 0;
   const order: Order = {
     id: randomUUID(),
     orderNumber: nextOrderNumber(),
@@ -329,7 +349,9 @@ export function transitionOrder(orderId: string, status: OrderStatus, actor = "s
   order.status = status;
   order.updatedAt = now();
   order.activityLog.unshift(activity(actor as ActivityEvent["actor"], "status_changed", `Status changed to ${status}.`));
-  if (status === "completed") decrementInventory(order);
+  // Consume blank stock when production starts (idempotent), and again as a safety net at
+  // completion for quick sales that skip the production stages.
+  if (status === "in_production" || status === "completed") decrementInventory(order);
   enqueue(statusChanged(order));
   persistState();
   return order;
@@ -444,6 +466,7 @@ export function approveProof(orderId: string): Order {
 
 export function queueNotification(payload: NotificationPayload) {
   state.notifications.unshift(payload);
+  dispatchNotification(payload);
   persistState();
 }
 
@@ -810,6 +833,39 @@ export function replaceEmailSettings(input: {
   return publicEmailSettings();
 }
 
+// Public (safe) view of the SMS settings — never exposes the stored API key.
+export function publicSmsSettings(settings: SmsCredentials = state.smsSettings): SmsSettings {
+  return {
+    enabled: settings.enabled,
+    provider: "infobip",
+    baseUrl: settings.baseUrl,
+    sender: settings.sender,
+    hasApiKey: Boolean(settings.apiKey)
+  };
+}
+
+export function replaceSmsSettings(input: {
+  enabled?: boolean | undefined;
+  baseUrl?: string | undefined;
+  sender?: string | undefined;
+  apiKey?: string | undefined;
+}): SmsSettings {
+  const current = state.smsSettings;
+  const nextApiKey = typeof input.apiKey === "string" && input.apiKey.trim().length > 0
+    ? input.apiKey.trim()
+    : current.apiKey;
+  state.smsSettings = {
+    provider: "infobip",
+    enabled: input.enabled ?? current.enabled,
+    baseUrl: input.baseUrl !== undefined ? String(input.baseUrl).trim() : current.baseUrl,
+    sender: input.sender !== undefined ? String(input.sender).trim() : current.sender,
+    hasApiKey: Boolean(nextApiKey),
+    apiKey: nextApiKey
+  };
+  persistState();
+  return publicSmsSettings();
+}
+
 function upsertCustomer(input: { name: string; mobile: string; email?: string | undefined }): Customer {
   const existing = state.customers.find((customer) => customer.mobile === input.mobile || (!!input.email && customer.email === input.email));
   if (existing) {
@@ -843,8 +899,24 @@ function activity(actor: ActivityEvent["actor"], event: string, message: string)
   return { id: randomUUID(), actor, event, message, createdAt: now() };
 }
 
+// Actually deliver a customer notification via the configured channel. Fire-and-forget; a send
+// failure is logged but never breaks the order flow. Falls back silently to "logged only" when
+// the channel isn't configured.
+function dispatchNotification(payload: NotificationPayload) {
+  if (!payload.recipient || !SENDABLE_EVENTS.has(payload.event)) return;
+  if (payload.channel === "sms" && smsIsConfigured(state.smsSettings)) {
+    const text = payload.subject ? `${payload.subject}\n${payload.message}` : payload.message;
+    void sendSms(state.smsSettings, payload.recipient, text)
+      .catch((error) => console.error("[sms] send failed:", error instanceof Error ? error.message : error));
+  } else if (payload.channel === "email" && payload.recipient.includes("@") && emailIsConfigured(state.emailSettings)) {
+    void sendEmail(state.emailSettings, { to: payload.recipient, subject: payload.subject ?? "Finesse Fashion Design Enterprise", text: payload.message })
+      .catch((error) => console.error("[email] send failed:", error instanceof Error ? error.message : error));
+  }
+}
+
 function enqueue(payloads: NotificationPayload[]) {
   state.notifications.unshift(...payloads);
+  for (const payload of payloads) dispatchNotification(payload);
 }
 
 function longSideForOrder(order: Order): number | undefined {
@@ -857,6 +929,8 @@ function longSideForOrder(order: Order): number | undefined {
 }
 
 function decrementInventory(order: Order) {
+  // Idempotent: only consume once per order, even across restarts (movements are persisted).
+  if (state.stockMovements.some((movement) => movement.orderId === order.id && movement.type === "consume")) return;
   for (const item of order.items) {
     const product = state.catalog.find((candidate) => candidate.id === item.productId);
     for (const tag of product?.inventoryTags ?? []) {

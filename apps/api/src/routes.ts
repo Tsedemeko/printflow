@@ -35,6 +35,8 @@ import {
   replaceBankingDetails,
   replaceEmailSettings,
   publicEmailSettings,
+  replaceSmsSettings,
+  publicSmsSettings,
   sendProof,
   publicStaff,
   state,
@@ -209,6 +211,18 @@ router.put("/settings/email", requireAccess("catalog_pricing"), (req, res) => {
     password: z.string().optional()
   }).parse(req.body);
   res.json({ email: replaceEmailSettings(body) });
+});
+
+// SMS (Infobip) settings — owner-managed; the GET never returns the stored API key.
+router.get("/settings/sms", requireAccess("catalog_pricing"), (_req, res) => res.json({ sms: publicSmsSettings() }));
+router.put("/settings/sms", requireAccess("catalog_pricing"), (req, res) => {
+  const body = z.object({
+    enabled: z.boolean().optional(),
+    baseUrl: z.string().optional(),
+    sender: z.string().optional(),
+    apiKey: z.string().optional()
+  }).parse(req.body);
+  res.json({ sms: replaceSmsSettings(body) });
 });
 
 router.get("/catalog/products", (_req, res) => res.json({ products: state.catalog }));

@@ -3,6 +3,7 @@ import {
   defaultAccessForRoles,
   defaultBankingDetails,
   defaultEmailSettings,
+  defaultSmsSettings,
   defaultDepositRules,
   defaultDiscountRules,
   defaultKioskCategories
@@ -23,7 +24,7 @@ import type {
   StaffMember
 } from "@printflow/shared";
 import type { DiscountRule } from "@printflow/shared";
-import type { AppState, EmailCredentials, InventoryItem, StaffRecord } from "../store.js";
+import type { AppState, EmailCredentials, SmsCredentials, InventoryItem, StaffRecord } from "../store.js";
 import { hasSupabaseAdmin, supabaseRest } from "./supabase.js";
 
 type Row = Record<string, unknown>;
@@ -92,7 +93,8 @@ export async function loadSupabaseState(): Promise<Partial<AppState> | null> {
     counterQueue: counterQueue.map(rowToCounterTicket),
     kioskCategories: kioskCategories.length ? kioskCategories.map(rowToKioskCategory) : defaultKioskCategories,
     bankingDetails: rowToBankingDetails(shopSettings[0]),
-    emailSettings: rowToEmailSettings(shopSettings[0])
+    emailSettings: rowToEmailSettings(shopSettings[0]),
+    smsSettings: rowToSmsSettings(shopSettings[0])
   };
 }
 
@@ -127,6 +129,20 @@ function rowToEmailSettings(row: Row | undefined): EmailCredentials {
   };
 }
 
+function rowToSmsSettings(row: Row | undefined): SmsCredentials {
+  const sms = (row?.sms ?? null) as Partial<SmsCredentials> | null;
+  if (!sms) return { ...defaultSmsSettings };
+  const apiKey = optionalString(sms.apiKey);
+  return {
+    provider: "infobip",
+    enabled: Boolean(sms.enabled),
+    baseUrl: string(sms.baseUrl),
+    sender: string(sms.sender) || defaultSmsSettings.sender,
+    hasApiKey: Boolean(apiKey),
+    apiKey
+  };
+}
+
 export async function persistSupabaseState(state: AppState): Promise<void> {
   if (!remotePersistenceEnabled()) return;
   await Promise.all([
@@ -147,6 +163,13 @@ export async function persistSupabaseState(state: AppState): Promise<void> {
         fromName: state.emailSettings.fromName,
         user: state.emailSettings.user,
         password: state.emailSettings.password ?? null
+      },
+      sms: {
+        enabled: state.smsSettings.enabled,
+        provider: "infobip",
+        baseUrl: state.smsSettings.baseUrl,
+        sender: state.smsSettings.sender,
+        apiKey: state.smsSettings.apiKey ?? null
       }
     }])
   ]);

@@ -514,7 +514,7 @@ export function getProduct(productId: string): CatalogProduct {
   return product;
 }
 
-import type { BankingDetails, EmailSettings, KioskCategory } from "./types.js";
+import type { BankingDetails, EmailSettings, SmsSettings, KioskCategory } from "./types.js";
 
 export const defaultKioskCategories: KioskCategory[] = [
   { id: "apparel", label: "Apparel, Sublimation & Fashion", description: "T-shirts, golf, hoodies, tracksuits, kits, school uniforms, embroidery, overalls, jumpsuits, wedding & traditional dress, trousers." },
@@ -538,4 +538,12 @@ export const defaultEmailSettings: EmailSettings = {
   fromName: "Finesse Fashion Design Enterprise",
   user: "",
   hasPassword: false
+};
+
+export const defaultSmsSettings: SmsSettings = {
+  enabled: false,
+  provider: "infobip",
+  baseUrl: "",
+  sender: "Finesse",
+  hasApiKey: false
 };

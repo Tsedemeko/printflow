@@ -26,7 +26,10 @@ create table if not exists shop_settings (
   updated_at timestamptz not null default now()
 );
 
-insert into shop_settings (id, banking, email) values ('shop', '{}', '{}')
+-- Added later: outbound SMS (Infobip) settings.
+alter table shop_settings add column if not exists sms jsonb not null default '{}';
+
+insert into shop_settings (id, banking, email, sms) values ('shop', '{}', '{}', '{}')
 on conflict (id) do nothing;
 `;
 

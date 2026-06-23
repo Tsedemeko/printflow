@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, SafeAreaV
 import * as SplashScreen from "expo-splash-screen";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
-import type { CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
+import type { CatalogProduct, CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
 
 // Keep the native splash visible until the first screen has painted (no white flash).
@@ -452,30 +452,31 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
   const orderMatches = orderSearch.trim()
     ? orders.filter((item) => `${item.orderNumber} ${item.customer.name} ${item.customer.mobile}`.toLowerCase().includes(orderSearch.toLowerCase())).slice(0, 6)
     : [];
-  const [inventory, setInventory] = useState<{ id: string; sku: string; name: string; quantityOnHand: number }[]>([]);
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedItem, setSelectedItem] = useState<{ id: string; sku: string; name: string; quantityOnHand: number } | null>(null);
+  const [qsProduct, setQsProduct] = useState<CatalogProduct | null>(null);
+  const [qsQty, setQsQty] = useState("1");
   const [message, setMessage] = useState("");
   const [showQuick, setShowQuick] = useState(false);
   const [amountInput, setAmountInput] = useState("");
-  const filteredInventory = inventory.filter((item) => `${item.sku} ${item.name}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
+  const filteredCatalog = catalog.filter((item) => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
 
   useEffect(() => {
-    void refreshInventory();
+    void refreshCatalog();
   }, []);
+
+  async function refreshCatalog() {
+    const response = await fetch(`${apiUrl}/catalog/products`);
+    if (response.ok) {
+      const payload = await response.json() as { products: CatalogProduct[] };
+      setCatalog(payload.products.filter((item) => item.enabled ?? true));
+    }
+  }
 
   // Default the amount to the outstanding balance whenever the active order changes.
   useEffect(() => {
     setAmountInput(order && order.balanceDue > 0 ? order.balanceDue.toFixed(2) : "");
   }, [order?.id, order?.balanceDue]);
-
-  async function refreshInventory() {
-    const response = await fetch(`${apiUrl}/inventory`);
-    if (response.ok) {
-      const payload = await response.json() as { items: { id: string; sku: string; name: string; quantityOnHand: number }[] };
-      setInventory(payload.items);
-    }
-  }
 
   async function pay(method: PaymentMethod) {
     if (!order) return;
@@ -512,24 +513,29 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
   }
 
   async function quickSale() {
-    const itemName = selectedItem?.name ?? search.trim();
-    if (!itemName) {
-      setMessage("Search or select an inventory item first.");
+    if (!qsProduct) {
+      setMessage("Search and select a product to sell first.");
       return;
     }
+    const qty = Math.max(1, Number(qsQty) || 1);
+    // Default each option group to its first choice for an off-the-shelf sale.
+    const selectedOptions = Object.fromEntries(Object.entries(qsProduct.options).map(([group, opts]) => [group, opts[0]?.id ?? ""]));
     const response = await fetch(`${apiUrl}/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         source: "quick_sale",
         customer: { name: "Walk-in customer", mobile: "+27000000000" },
-        items: [{ productId: "quick-photo-frame", quantity: 1, selectedOptions: { size: "a4" }, specialInstructions: itemName }]
+        items: [{ productId: qsProduct.id, quantity: qty, selectedOptions }]
       })
     });
     if (response.ok) {
       const payload = await response.json() as { order: Order };
-      setMessage(`${payload.order.orderNumber} quick sale created for ${itemName}.`);
+      setMessage(`${payload.order.orderNumber} quick sale created: ${qty} × ${qsProduct.name}. Settle it above.`);
+      setQsProduct(null); setSearch(""); setQsQty("1"); setShowQuick(false);
       await onRefresh();
+    } else {
+      setMessage("Could not create the quick sale.");
     }
   }
 
@@ -611,12 +617,20 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
       </Pressable>
       {showQuick ? (
         <View style={styles.panel}>
-          <TextInput style={styles.input} value={search} onChangeText={(value) => { setSearch(value); setSelectedItem(null); }} placeholder="Search ready-made stock item" />
-          {filteredInventory.map((item) => (
-            <Pressable style={styles.secondaryButton} key={item.id} onPress={() => { setSelectedItem(item); setSearch(item.name); }}>
-              <Text style={styles.secondaryButtonText}>{item.sku} - {item.name} - {item.quantityOnHand} left</Text>
+          <Text style={styles.muted}>Sell an item off the shelf — pick the product, set quantity, then settle payment above.</Text>
+          <TextInput style={styles.input} value={search} onChangeText={(value) => { setSearch(value); setQsProduct(null); }} placeholder="Search products to sell" />
+          {!qsProduct ? filteredCatalog.map((item) => (
+            <Pressable style={styles.secondaryButton} key={item.id} onPress={() => { setQsProduct(item); setSearch(item.name); }}>
+              <Text style={styles.secondaryButtonText}>{item.name} — R{item.basePrice.toFixed(2)}</Text>
             </Pressable>
-          ))}
+          )) : null}
+          {qsProduct ? (
+            <>
+              <Text style={styles.muted}>Selected: {qsProduct.name} (R{qsProduct.basePrice.toFixed(2)} each)</Text>
+              <Text style={styles.muted}>Quantity</Text>
+              <TextInput style={styles.input} keyboardType="number-pad" value={qsQty} onChangeText={(t) => setQsQty(t.replace(/[^0-9]/g, ""))} />
+            </>
+          ) : null}
           <Pressable style={styles.button} onPress={() => void quickSale()}><Text style={styles.buttonText}>Create quick sale</Text></Pressable>
         </View>
       ) : null}

@@ -5,6 +5,7 @@ import { DiscountRulesManager } from "../../components/DiscountRulesManager";
 import { KioskCategoriesManager } from "../../components/KioskCategoriesManager";
 import { BankingDetailsManager } from "../../components/BankingDetailsManager";
 import { EmailSettingsManager } from "../../components/EmailSettingsManager";
+import { SmsSettingsManager } from "../../components/SmsSettingsManager";
 import { getAdminData, getBankingDetails, getKioskCategories } from "../../lib/api-data";
 
 export default async function SettingsPage() {
@@ -20,6 +21,7 @@ export default async function SettingsPage() {
         <KioskCategoriesManager initialCategories={kioskCategories} />
         <BankingDetailsManager initialBanking={banking} />
         <EmailSettingsManager />
+        <SmsSettingsManager />
       </section>
     </PortalShell>
   );

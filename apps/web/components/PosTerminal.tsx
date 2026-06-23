@@ -1,6 +1,6 @@
 "use client";
 
-import type { Order, PaymentMethod } from "@printflow/shared";
+import type { CatalogProduct, Order, PaymentMethod } from "@printflow/shared";
 import { useEffect, useMemo, useState } from "react";
 import { staffAuthHeaders } from "../lib/staff-session";
 
@@ -9,16 +9,25 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
   const [orders, setOrders] = useState(initialOrders);
   const [selectedOrderId, setSelectedOrderId] = useState(initialOrders.find((order) => order.status === "ready_for_collection")?.id ?? initialOrders[0]?.id ?? "");
-  const [quickSaleName, setQuickSaleName] = useState("Photo frame");
-  const [inventory, setInventory] = useState<{ id: string; sku: string; name: string; quantityOnHand: number }[]>([]);
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [qsSearch, setQsSearch] = useState("");
+  const [qsProductId, setQsProductId] = useState("");
+  const [qsQty, setQsQty] = useState("1");
+  const [amountInput, setAmountInput] = useState("");
   const [message, setMessage] = useState("");
   const selectedOrder = useMemo(() => orders.find((order) => order.id === selectedOrderId) ?? orders[0], [orders, selectedOrderId]);
-  const filteredInventory = useMemo(() => inventory.filter((item) => `${item.sku} ${item.name}`.toLowerCase().includes(quickSaleName.toLowerCase())), [inventory, quickSaleName]);
+  const qsProduct = catalog.find((item) => item.id === qsProductId);
+  const filteredCatalog = useMemo(() => catalog.filter((item) => item.name.toLowerCase().includes(qsSearch.toLowerCase())).slice(0, 6), [catalog, qsSearch]);
 
   useEffect(() => {
     void refresh();
-    void refreshInventory();
+    void refreshCatalog();
   }, []);
+
+  // Default the amount to the outstanding balance whenever the selected order changes.
+  useEffect(() => {
+    setAmountInput(selectedOrder && selectedOrder.balanceDue > 0 ? selectedOrder.balanceDue.toFixed(2) : "");
+  }, [selectedOrder?.id, selectedOrder?.balanceDue]);
 
   async function refresh() {
     const response = await fetch(`${apiUrl}/orders`);
@@ -29,43 +38,65 @@ export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
     }
   }
 
-  async function refreshInventory() {
-    const response = await fetch(`${apiUrl}/inventory`);
+  async function refreshCatalog() {
+    const response = await fetch(`${apiUrl}/catalog/products`);
     if (response.ok) {
-      const payload = await response.json() as { items: { id: string; sku: string; name: string; quantityOnHand: number }[] };
-      setInventory(payload.items);
+      const payload = await response.json() as { products: CatalogProduct[] };
+      setCatalog(payload.products.filter((item) => item.enabled ?? true));
     }
   }
 
   async function record(method: PaymentMethod) {
     if (!selectedOrder) return;
-    await fetch(`${apiUrl}/payments/${selectedOrder.id}`, {
+    if (selectedOrder.balanceDue <= 0) {
+      setMessage(`${selectedOrder.orderNumber} is already settled — nothing to pay.`);
+      return;
+    }
+    const amount = Math.round((Number(amountInput) || 0) * 100) / 100;
+    if (amount <= 0) {
+      setMessage("Enter an amount greater than zero.");
+      return;
+    }
+    if (amount > selectedOrder.balanceDue + 0.001) {
+      setMessage(`Amount can't exceed the balance of R${selectedOrder.balanceDue.toFixed(2)}.`);
+      return;
+    }
+    const response = await fetch(`${apiUrl}/payments/${selectedOrder.id}`, {
       method: "POST",
       headers: staffAuthHeaders(["cashier"]),
-      body: JSON.stringify({ method, amount: selectedOrder.balanceDue || selectedOrder.requiredDeposit || selectedOrder.total })
+      body: JSON.stringify({ method, amount })
     });
+    if (!response.ok) {
+      setMessage("Could not record the payment. Please try again.");
+      return;
+    }
     await fetch(`${apiUrl}/payments/${selectedOrder.id}/receipt`, {
       method: "POST",
       headers: staffAuthHeaders(["cashier"]),
-      body: JSON.stringify({ channel: "sms" })
+      body: JSON.stringify({ channel: selectedOrder.customer.email ? "email" : "sms" })
     });
-    setMessage(`${method.replaceAll("_", " ")} payment recorded for ${selectedOrder.orderNumber}. Receipt queued by SMS and ready to print.`);
+    setMessage(`${method.replaceAll("_", " ")} payment of R${amount.toFixed(2)} recorded for ${selectedOrder.orderNumber}. Receipt sent.`);
     await refresh();
   }
 
   async function createQuickSale() {
+    if (!qsProduct) { setMessage("Search and pick a product to sell first."); return; }
+    const qty = Math.max(1, Number(qsQty) || 1);
+    const selectedOptions = Object.fromEntries(Object.entries(qsProduct.options).map(([group, opts]) => [group, opts[0]?.id ?? ""]));
     const response = await fetch(`${apiUrl}/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         source: "quick_sale",
         customer: { name: "Walk-in customer", mobile: "+27000000000" },
-        items: [{ productId: "quick-photo-frame", quantity: 1, selectedOptions: { size: "a4" }, specialInstructions: quickSaleName }]
+        items: [{ productId: qsProduct.id, quantity: qty, selectedOptions }]
       })
     });
+    if (!response.ok) { setMessage("Could not create the quick sale."); return; }
     const payload = await response.json() as { order: Order };
     setSelectedOrderId(payload.order.id);
-    setMessage(`${payload.order.orderNumber} quick sale created.`);
+    setMessage(`${payload.order.orderNumber} quick sale created: ${qty} × ${qsProduct.name}. Now settle it.`);
+    setQsProductId(""); setQsSearch(""); setQsQty("1");
     await refresh();
   }
 
@@ -79,13 +110,32 @@ export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
             Select order
             <select value={selectedOrderId} onChange={(event) => setSelectedOrderId(event.target.value)}>
               {orders.map((order) => (
-                <option key={order.id} value={order.id}>{order.orderNumber} - {order.customer.name}</option>
+                <option key={order.id} value={order.id}>{order.orderNumber} - {order.customer.name} (R{order.balanceDue.toFixed(2)})</option>
               ))}
             </select>
           </label>
         ) : null}
         <p>{selectedOrder?.customer.name} | {selectedOrder?.queueName.replaceAll("_", " ")}</p>
+        {selectedOrder ? (
+          <p className="muted-note">
+            Total R{selectedOrder.total.toFixed(2)}
+            {selectedOrder.discountTotal > 0 ? ` · Discount −R${selectedOrder.discountTotal.toFixed(2)}` : ""}
+            {selectedOrder.requiredDeposit > 0 ? ` · Deposit R${selectedOrder.requiredDeposit.toFixed(2)}` : ""}
+          </p>
+        ) : null}
         <strong className="amount">R{(selectedOrder?.balanceDue ?? 0).toFixed(2)}</strong>
+        <label>
+          Amount to charge (edit for a deposit or part-payment)
+          <input value={amountInput} onChange={(event) => setAmountInput(event.target.value.replace(/[^0-9.]/g, ""))} placeholder="0.00" />
+        </label>
+        {selectedOrder ? (
+          <div className="row">
+            <button className="secondary compact" type="button" onClick={() => setAmountInput(selectedOrder.balanceDue.toFixed(2))}>Full balance</button>
+            {selectedOrder.requiredDeposit > 0 && selectedOrder.requiredDeposit < selectedOrder.balanceDue ? (
+              <button className="secondary compact" type="button" onClick={() => setAmountInput(selectedOrder.requiredDeposit.toFixed(2))}>Deposit R{selectedOrder.requiredDeposit.toFixed(0)}</button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="row">
           {[
             ["card_yoco", "Yoco Card"],
@@ -101,18 +151,23 @@ export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
       </article>
       <article className="card glossy section-teal pos-quick-sale">
         <span className="status">quick sale</span>
-        <h2>Ready-made items</h2>
-        <label>Search stock<input value={quickSaleName} onChange={(event) => setQuickSaleName(event.target.value)} /></label>
-        <div className="inventory-results">
-          {filteredInventory.slice(0, 5).map((item) => (
-            <button className="secondary compact" key={item.id} onClick={() => setQuickSaleName(item.name)} type="button">
-              {item.sku} | {item.name} | {item.quantityOnHand} left
-            </button>
-          ))}
-        </div>
+        <h2>Sell an item off the shelf</h2>
+        <label>Search products<input value={qsSearch} onChange={(event) => { setQsSearch(event.target.value); setQsProductId(""); }} placeholder="e.g. T-shirt, cap, bucket hat" /></label>
+        {!qsProduct ? (
+          <div className="inventory-results">
+            {filteredCatalog.map((item) => (
+              <button className="secondary compact" key={item.id} onClick={() => { setQsProductId(item.id); setQsSearch(item.name); }} type="button">
+                {item.name} — R{item.basePrice.toFixed(2)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <label>Quantity of {qsProduct.name} (R{qsProduct.basePrice.toFixed(2)} each)
+            <input type="number" min={1} value={qsQty} onChange={(event) => setQsQty(event.target.value.replace(/[^0-9]/g, ""))} />
+          </label>
+        )}
         <div className="row">
           <button onClick={() => void createQuickSale()} type="button">Create quick sale</button>
-          <a className="button secondary" href="/inventory">View inventory</a>
           <button className="secondary" type="button" onClick={() => window.print()}>Print receipt</button>
         </div>
         <div className="quote">Quick-sale orders are saved through the API and appear in reporting, payments, and reconciliation.</div>

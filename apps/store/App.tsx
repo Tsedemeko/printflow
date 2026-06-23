@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { calculateRequiredDeposit, priceQuote, statusLabel } from "@printflow/shared";
+import { statusLabel } from "@printflow/shared";
 import type { CatalogProduct, CounterQueueTicket, Order, PaymentMethod, StaffRole } from "@printflow/shared";
 import { storeData } from "./src/demo";
 
@@ -247,25 +247,7 @@ function WaitingBanner({ tickets, staffName, onRefresh }: { tickets: CounterQueu
 }
 
 function Counter({ orders, tickets, staffName, onRefresh }: { orders: Order[]; tickets: CounterQueueTicket[]; staffName: string; onRefresh: () => Promise<void> }) {
-  const quote = useMemo(() => priceQuote([{ productId: "canvas-framed", quantity: 1, selectedOptions: { size: "a2", depth: "38mm", edge: "image", frame: "floating" } }]), []);
-  const deposit = calculateRequiredDeposit(quote.total, quote.items);
-  const order = orders[0];
-
-  async function approve() {
-    if (!order) return;
-    await fetch(`${apiUrl}/orders/${order.id}/status`, {
-      method: "POST",
-      headers: staffHeaders(["designer"]),
-      body: JSON.stringify({ status: "approved" })
-    });
-    await onRefresh();
-  }
-
-  async function sendUploadLink() {
-    if (!order) return;
-    await fetch(`${apiUrl}/proofs/${order.id}/send`, { method: "POST", headers: staffHeaders(["designer"]) });
-    await onRefresh();
-  }
+  const [openId, setOpenId] = useState<string | null>(null);
 
   async function acknowledge(ticket: CounterQueueTicket) {
     await fetch(`${apiUrl}/counter/queue/${ticket.orderId}/acknowledge`, {
@@ -276,28 +258,47 @@ function Counter({ orders, tickets, staffName, onRefresh }: { orders: Order[]; t
     await onRefresh();
   }
 
+  async function resolve(ticket: CounterQueueTicket) {
+    await fetch(`${apiUrl}/counter/queue/${ticket.orderId}/resolve`, { method: "POST", headers: staffHeaders(["cashier"]) });
+    await onRefresh();
+  }
+
   return (
     <View>
       <Text style={styles.eyebrow}>Assisted order finalization</Text>
       <Text style={styles.title}>Counter workflow</Text>
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Waiting customers</Text>
-        {tickets.length === 0 ? <Text style={styles.muted}>No kiosk customers waiting.</Text> : null}
-        {tickets.map((ticket) => (
-          <View style={styles.job} key={ticket.id}>
-            <Text style={styles.tileTitle}>{ticket.position}. {ticket.orderNumber} - {ticket.customerName}</Text>
-            <Text style={styles.muted}>{ticket.department.replace("_", " ")} | {ticket.status}</Text>
-            <Pressable style={styles.secondaryButton} onPress={() => void acknowledge(ticket)}><Text style={styles.secondaryButtonText}>Acknowledge</Text></Pressable>
-          </View>
-        ))}
-      </View>
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Pre-order {order?.orderNumber ?? "#1042"}</Text>
-        <Text style={styles.total}>Total R{quote.total.toFixed(2)} | Deposit R{deposit.amount.toFixed(2)}</Text>
-        <View style={styles.row}>
-          <Pressable style={styles.button} onPress={() => void approve()}><Text style={styles.buttonText}>Customer Approved</Text></Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => void sendUploadLink()}><Text style={styles.secondaryButtonText}>Send upload link</Text></Pressable>
-        </View>
+        {tickets.length === 0 ? <Text style={styles.muted}>No customers waiting.</Text> : null}
+        {tickets.map((ticket) => {
+          const order = orders.find((item) => item.id === ticket.orderId);
+          const isOpen = openId === ticket.id;
+          return (
+            <View style={styles.job} key={ticket.id}>
+              <Pressable onPress={() => setOpenId(isOpen ? null : ticket.id)}>
+                <Text style={styles.tileTitle}>{ticket.position}. {ticket.orderNumber} - {ticket.customerName}</Text>
+                <Text style={styles.muted}>{ticket.department.replace("_", " ")} | {ticket.status} {isOpen ? "▲" : "▼"}</Text>
+              </Pressable>
+              {isOpen && order ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={styles.muted}>{order.customer.mobile}{order.customer.email ? ` · ${order.customer.email}` : ""}</Text>
+                  {order.items.map((item) => (
+                    <Text style={styles.muted} key={item.id}>• {item.quantity} × {item.productName} — R{item.lineTotal.toFixed(2)}</Text>
+                  ))}
+                  <Text style={styles.total}>Total R{order.total.toFixed(2)} | Deposit R{order.requiredDeposit.toFixed(2)} | Balance R{order.balanceDue.toFixed(2)}</Text>
+                  {order.awaitingPayment ? <Text style={styles.warning}>Deposit not paid — take it on the POS tab to release to production.</Text> : null}
+                  <View style={styles.row}>
+                    {ticket.status === "waiting" || ticket.status === "escalated" ? (
+                      <Pressable style={styles.secondaryButton} onPress={() => void acknowledge(ticket)}><Text style={styles.secondaryButtonText}>Acknowledge</Text></Pressable>
+                    ) : null}
+                    <Pressable style={styles.button} onPress={() => void resolve(ticket)}><Text style={styles.buttonText}>Done — resolve</Text></Pressable>
+                  </View>
+                </View>
+              ) : null}
+              {isOpen && !order ? <Text style={styles.muted}>Order details unavailable.</Text> : null}
+            </View>
+          );
+        })}
       </View>
     </View>
   );

@@ -49,22 +49,24 @@ export function ProductionBoard({ initialColumns }: { initialColumns: BoardColum
     <div className="board">
       {columns.slice(0, 8).map((column) => (
         <section className={`board-column glossy column-${column.status}`} key={column.status}>
-          <h3>{column.label}</h3>
-          {column.orders.map((order) => (
-            <article className={`job glossy job-${order.status}`} key={order.id}>
-              <span className="status">{order.queueName.replaceAll("_", " ")}</span>
-              <h3>{order.orderNumber}</h3>
-              <p>{order.customer.name} | Balance R{order.balanceDue.toFixed(2)}</p>
-              {order.dueAt ? <p className="due-line">Due {new Date(order.dueAt).toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}</p> : null}
-              <span className="badge">{order.items[0]?.batchKey}</span>
-              <div className="row">
-                <a className="button secondary compact" href={`/upload/${order.id}`}>View</a>
-                <button className="secondary compact" onClick={() => void move(order)} type="button">Move</button>
-                <button className="secondary compact" onClick={() => void sendProof(order)} type="button">Proof</button>
-              </div>
-            </article>
-          ))}
-          {column.orders.length === 0 ? <p>No jobs in this stage.</p> : null}
+          <h3 className="board-column-title">{column.label} <span className="board-count">{column.orders.length}</span></h3>
+          <div className="board-column-body">
+            {column.orders.map((order) => (
+              <article className={`job glossy job-${order.status}`} key={order.id}>
+                <span className="status">{order.queueName.replaceAll("_", " ")}</span>
+                <h3>{order.orderNumber}</h3>
+                <p>{order.customer.name} | Balance R{order.balanceDue.toFixed(2)}</p>
+                {order.dueAt ? <p className="due-line">Due {new Date(order.dueAt).toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}</p> : null}
+                <span className="badge">{order.items[0]?.batchKey}</span>
+                <div className="row">
+                  <a className="button secondary compact" href={`/upload/${order.id}`}>View</a>
+                  <button className="secondary compact" onClick={() => void move(order)} type="button">Move</button>
+                  <button className="secondary compact" onClick={() => void sendProof(order)} type="button">Proof</button>
+                </div>
+              </article>
+            ))}
+            {column.orders.length === 0 ? <p>No jobs in this stage.</p> : null}
+          </div>
         </section>
       ))}
     </div>

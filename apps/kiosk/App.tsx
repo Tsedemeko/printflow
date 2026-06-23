@@ -32,6 +32,7 @@ export default function App() {
   const [lookupReference, setLookupReference] = useState("");
   const [lookupResult, setLookupResult] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [checking, setChecking] = useState(false);
   const { width } = useWindowDimensions();
   // Tablet: keep content in a centered ~760px column instead of stretching edge-to-edge.
@@ -59,7 +60,29 @@ export default function App() {
   }, [product, quantity, selectedOptions]);
   const deposit = calculateRequiredDeposit(quote.total, quote.items);
 
+  // On the ticket screen, auto-return home after a short while so the kiosk is ready for the next person.
+  useEffect(() => {
+    if (step !== "ticket") return undefined;
+    const timer = setTimeout(() => goHome(), 25000);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  // Reset everything and return to the home screen for the next customer.
+  function goHome() {
+    setCustomerName("");
+    setCustomerMobile("");
+    setQuantity(1);
+    setTicketNumber("");
+    setCreateError("");
+    setLookupReference("");
+    setLookupResult("");
+    setSelectedCategory("apparel");
+    setStep("categories");
+  }
+
   async function createPreOrder() {
+    setCreateError("");
+    if (!customerName.trim() || !customerMobile.trim()) { setCreateError("Please enter your name and mobile number."); return; }
     setCreating(true);
     try {
       const response = await fetch(`${apiUrl}/orders`, {
@@ -67,14 +90,20 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source: "kiosk",
-          customer: { name: customerName, mobile: customerMobile },
+          customer: { name: customerName.trim(), mobile: customerMobile.trim() },
           items: [{ productId: product.id, quantity, selectedOptions }]
         })
       });
+      if (!response.ok) {
+        throw new Error(`We couldn't create your ticket (error ${response.status}). Please try again or ask a staff member.`);
+      }
       const payload = await response.json();
-      setTicketNumber(payload.order?.orderNumber ?? "Order created");
+      if (!payload.order?.orderNumber) throw new Error("No ticket was returned. Please try again.");
+      setTicketNumber(payload.order.orderNumber);
       setQueuePosition(payload.counterTicket?.position ?? 1);
       setStep("ticket");
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Could not reach the server. Please ask a staff member.");
     } finally {
       setCreating(false);
     }
@@ -229,6 +258,7 @@ export default function App() {
               <Pressable style={[styles.button, creating && styles.buttonDisabled]} disabled={creating} onPress={() => void createPreOrder()}>
                 {creating ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Create pre-order</Text>}
               </Pressable>
+              {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
             </View>
           </View>
         ) : null}
@@ -241,7 +271,8 @@ export default function App() {
               <Text style={styles.big}>{ticketNumber}</Text>
               <Text style={styles.panelTitle}>Please wait, a consultant will call you shortly.</Text>
               <Text style={styles.muted}>Your queue position is {queuePosition}. Staff have been alerted. If the counter is unattended, this ticket escalates to the owner or manager.</Text>
-              <Pressable style={styles.secondaryButton} onPress={() => setStep("categories")}><Text style={styles.secondaryButtonText}>Start another order</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={goHome}><Text style={styles.secondaryButtonText}>Done — back to start</Text></Pressable>
+              <Text style={styles.muted}>This screen returns to the start shortly for the next customer.</Text>
             </View>
           </View>
         ) : null}
@@ -304,5 +335,6 @@ const styles = StyleSheet.create({
   qtyBtnText: { color: "#ffffff", fontSize: 22, fontWeight: "900" },
   qtyInput: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, fontSize: 18, fontWeight: "800", minHeight: 46, minWidth: 70, paddingHorizontal: 12, textAlign: "center" },
   big: { color: "#0f1f3d", fontSize: 56, fontWeight: "900", marginVertical: 8 },
-  statusBox: { backgroundColor: "#f3ecd9", borderRadius: 8, marginTop: 12, padding: 12 }
+  statusBox: { backgroundColor: "#f3ecd9", borderRadius: 8, marginTop: 12, padding: 12 },
+  errorText: { color: "#b3261e", fontWeight: "700", marginTop: 10, textAlign: "center" }
 });

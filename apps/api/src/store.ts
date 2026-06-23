@@ -717,9 +717,10 @@ export function acknowledgeCounterTicket(orderId: string, staffName: string): Co
   return ticket;
 }
 
-export function resolveCounterTicket(orderId: string): CounterQueueTicket {
+export function resolveCounterTicket(orderId: string): CounterQueueTicket | null {
   const ticket = state.counterQueue.find((item) => item.orderId === orderId);
-  if (!ticket) throw Object.assign(new Error("Counter ticket not found"), { statusCode: 404 });
+  // No ticket is not an error — e.g. settling a POS order that never went through the queue.
+  if (!ticket) return null;
   ticket.status = "resolved";
   ticket.resolvedAt = now();
   persistState();

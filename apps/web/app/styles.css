@@ -599,7 +599,22 @@ textarea {
 .board-column {
   background: linear-gradient(180deg, #ffffff, #f7fbff);
   border-top: 6px solid var(--blue);
-  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  /* Fixed-height columns so a busy stage scrolls inside its box instead of stretching the page. */
+  height: 70vh;
+  overflow: hidden;
+}
+.board-column-title { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; margin: 0 0 8px; }
+.board-count { background: var(--blue); border-radius: 999px; color: #fff; font-size: 12px; padding: 2px 9px; }
+.board-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .column-awaiting_artwork,

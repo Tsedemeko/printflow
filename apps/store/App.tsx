@@ -156,7 +156,7 @@ export default function App() {
         {tab === "mywork" && staff ? <MyWork orders={orders} staff={staff} onRefresh={refreshOrders} /> : null}
         {tab === "counter" && staff ? <Counter orders={orders} tickets={counterQueue} staffName={staff.name} onRefresh={async () => { await refreshOrders(); await refreshCounterQueue(); }} /> : null}
         {tab === "jobs" && staff ? <Jobs orders={orders} onRefresh={refreshOrders} /> : null}
-        {tab === "pos" && staff ? <POS orders={orders} onRefresh={refreshOrders} /> : null}
+        {tab === "pos" && staff ? <POS orders={orders} onRefresh={refreshOrders} onSettled={() => setTab(tabsForRoles(staff.roles).includes("counter") ? "counter" : "pos")} /> : null}
         {tab === "shop" && staff && canUseStoreAdmin(staff.roles) ? <Shop staff={staff} /> : null}
       </ScrollView>
     </SafeAreaView>
@@ -418,21 +418,24 @@ function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise
           <View style={styles.panel} key={column.status}>
             <Text style={styles.panelTitle}>{column.label} ({columnOrders.length})</Text>
             {columnOrders.length === 0 ? <Text style={styles.muted}>No jobs in this stage.</Text> : null}
-            {columnOrders.map((order) => {
-              const isOpen = open === order.id;
-              const nextStatus = statuses[statuses.indexOf(order.status) + 1];
-              return (
-                <View style={styles.job} key={order.id}>
-                  <Pressable onPress={() => setOpen(isOpen ? null : order.id)}>
-                    <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
-                    <Text style={styles.muted}>{order.queueName.replace("_", " ")} | Balance R{order.balanceDue.toFixed(2)}</Text>
-                  </Pressable>
-                  {isOpen && nextStatus ? (
-                    <Pressable style={styles.secondaryButton} onPress={() => void move(order)}><Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text></Pressable>
-                  ) : null}
-                </View>
-              );
-            })}
+            {/* Fixed-height, scrollable so a busy stage doesn't stretch the whole screen. */}
+            <ScrollView style={styles.columnScroll} nestedScrollEnabled showsVerticalScrollIndicator>
+              {columnOrders.map((order) => {
+                const isOpen = open === order.id;
+                const nextStatus = statuses[statuses.indexOf(order.status) + 1];
+                return (
+                  <View style={styles.job} key={order.id}>
+                    <Pressable onPress={() => setOpen(isOpen ? null : order.id)}>
+                      <Text style={styles.tileTitle}>{order.orderNumber} - {order.customer.name}{order.rush ? "  ⚡" : ""}</Text>
+                      <Text style={styles.muted}>{order.queueName.replace("_", " ")} | Balance R{order.balanceDue.toFixed(2)}</Text>
+                    </Pressable>
+                    {isOpen && nextStatus ? (
+                      <Pressable style={styles.secondaryButton} onPress={() => void move(order)}><Text style={styles.secondaryButtonText}>Move to {statusLabel(nextStatus)}</Text></Pressable>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </ScrollView>
           </View>
         );
       })}
@@ -440,7 +443,7 @@ function Jobs({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise
   );
 }
 
-function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<void> }) {
+function POS({ orders, onRefresh, onSettled }: { orders: Order[]; onRefresh: () => Promise<void>; onSettled?: () => void }) {
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   // Cashier serves the customer in front of them: pick a specific order, else default to the
@@ -507,10 +510,20 @@ function POS({ orders, onRefresh }: { orders: Order[]; onRefresh: () => Promise<
     await fetch(`${apiUrl}/payments/${order.id}/receipt`, {
       method: "POST",
       headers: staffHeaders(["cashier"]),
-      body: JSON.stringify({ channel: "sms" })
-    });
-    setMessage(`Payment of R${amount.toFixed(2)} recorded for ${order.orderNumber}. Receipt queued by SMS.`);
+      body: JSON.stringify({ channel: order.customer.email ? "email" : "sms" })
+    }).catch(() => undefined);
+    // If this order came through the waiting queue, paying at the counter resolves that ticket.
+    // (No-op if there's no ticket; artwork can still be uploaded later via the upload link.)
+    await fetch(`${apiUrl}/counter/queue/${order.id}/resolve`, { method: "POST", headers: staffHeaders(["cashier"]) }).catch(() => undefined);
     await onRefresh();
+    const settled = amount >= order.balanceDue - 0.001;
+    Alert.alert("Payment recorded", `R${amount.toFixed(2)} for ${order.orderNumber}.${settled ? " Fully settled." : ` Balance R${(order.balanceDue - amount).toFixed(2)} remaining.`}`);
+    // Reset for the next customer and head back to the queue.
+    setPickedId(null);
+    setOrderSearch("");
+    setAmountInput("");
+    setMessage("");
+    onSettled?.();
   }
 
   async function quickSale() {
@@ -708,6 +721,7 @@ const styles = StyleSheet.create({
   previewRail: { flex: 1 },
   total: { color: "#0f1f3d", fontSize: 18, fontWeight: "800", marginTop: 12 },
   job: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 12 },
+  columnScroll: { maxHeight: 320 },
   input: { borderColor: "#d6deea", borderRadius: 8, borderWidth: 1, marginTop: 12, minHeight: 44, paddingHorizontal: 10 },
   warning: { color: "#b91c1c", fontWeight: "800", marginTop: 10 },
   alertPanel: { backgroundColor: "#fff7e8", borderColor: "#d79b28", borderRadius: 8, borderWidth: 1, padding: 14 },

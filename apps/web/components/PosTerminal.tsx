@@ -29,13 +29,15 @@ export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
     setAmountInput(selectedOrder && selectedOrder.balanceDue > 0 ? selectedOrder.balanceDue.toFixed(2) : "");
   }, [selectedOrder?.id, selectedOrder?.balanceDue]);
 
-  async function refresh() {
+  async function refresh(): Promise<Order[]> {
     const response = await fetch(`${apiUrl}/orders`);
     if (response.ok) {
       const payload = await response.json() as { orders: Order[] };
       setOrders(payload.orders);
       if (!selectedOrderId && payload.orders[0]) setSelectedOrderId(payload.orders[0].id);
+      return payload.orders;
     }
+    return orders;
   }
 
   async function refreshCatalog() {
@@ -75,8 +77,14 @@ export function PosTerminal({ initialOrders }: { initialOrders: Order[] }) {
       headers: staffAuthHeaders(["cashier"]),
       body: JSON.stringify({ channel: selectedOrder.customer.email ? "email" : "sms" })
     });
+    // Paying at the counter resolves the waiting-queue ticket (no-op if there isn't one).
+    await fetch(`${apiUrl}/counter/queue/${selectedOrder.id}/resolve`, { method: "POST", headers: staffAuthHeaders(["cashier"], false) }).catch(() => undefined);
     setMessage(`${method.replaceAll("_", " ")} payment of R${amount.toFixed(2)} recorded for ${selectedOrder.orderNumber}. Receipt sent.`);
-    await refresh();
+    const settledId = selectedOrder.id;
+    const fresh = await refresh();
+    // Move on to the next order needing payment.
+    const next = fresh.find((order) => order.id !== settledId && order.balanceDue > 0 && order.status !== "cancelled");
+    setSelectedOrderId(next?.id ?? "");
   }
 
   async function createQuickSale() {

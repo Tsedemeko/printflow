@@ -28,6 +28,8 @@ export function KioskFlow() {
   const [ticket, setTicket] = useState<{ orderNumber: string; uploadUrl: string; counterTicket?: CounterQueueTicket | undefined } | null>(null);
   const [lookup, setLookup] = useState("");
   const [lookupResult, setLookupResult] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const product = products.find((item) => item.id === productId) ?? products[0] ?? catalog[0]!;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => firstOptions(product));
   useEffect(() => { setSelectedOptions(firstOptions(product)); }, [product.id]);
@@ -52,19 +54,58 @@ export function KioskFlow() {
       .catch(() => undefined);
   }, []);
 
+  // Reset everything and go back to the home screen for the next customer.
+  function goHome() {
+    setTicket(null);
+    setError("");
+    setCustomer({ name: "", mobile: "", email: "" });
+    setQuantity(1);
+    setLookup("");
+    setLookupResult("");
+    const first = products.find((item) => item.category === "apparel") ?? products[0];
+    setCategory("apparel");
+    if (first) setProductId(first.id);
+    setStep("categories");
+  }
+
+  // On the ticket screen, auto-return home after a short while so the kiosk is ready for the next person.
+  useEffect(() => {
+    if (step !== "ticket") return undefined;
+    const timer = window.setTimeout(goHome, 25000);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+
   async function createPreOrder() {
-    const response = await fetch(`${apiUrl}/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: "kiosk",
-        customer,
-        items: [{ productId: product.id, quantity, selectedOptions }]
-      })
-    });
-    const payload = await response.json() as { order: { id: string; orderNumber: string }; counterTicket?: CounterQueueTicket };
-    setTicket({ orderNumber: payload.order.orderNumber, uploadUrl: `/upload/${payload.order.id}`, counterTicket: payload.counterTicket });
-    setStep("ticket");
+    setError("");
+    const name = customer.name.trim();
+    const mobile = customer.mobile.trim();
+    const email = customer.email.trim();
+    if (!name || !mobile) { setError("Please enter your name and mobile number."); return; }
+    // Only send the email if it's a valid address — a malformed one would reject the whole order.
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${apiUrl}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "kiosk",
+          customer: { name, mobile, ...(validEmail ? { email } : {}) },
+          items: [{ productId: product.id, quantity, selectedOptions }]
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`We couldn't create your ticket (error ${response.status}). Please try again or ask a staff member.`);
+      }
+      const payload = await response.json() as { order?: { id: string; orderNumber: string }; counterTicket?: CounterQueueTicket };
+      if (!payload.order?.id) throw new Error("No ticket was returned. Please try again.");
+      setTicket({ orderNumber: payload.order.orderNumber, uploadUrl: `/upload/${payload.order.id}`, counterTicket: payload.counterTicket });
+      setStep("ticket");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Could not reach the server. Please ask a staff member.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function lookupOrder() {
@@ -152,7 +193,8 @@ export function KioskFlow() {
             <label>Mobile<input value={customer.mobile} onChange={(event) => setCustomer({ ...customer, mobile: event.target.value })} /></label>
             <label>Email<input value={customer.email} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></label>
           </div>
-          <button disabled={!customer.name || !customer.mobile} onClick={() => void createPreOrder()} type="button">Create queue ticket</button>
+          <button disabled={!customer.name || !customer.mobile || submitting} onClick={() => void createPreOrder()} type="button">{submitting ? "Creating…" : "Create queue ticket"}</button>
+          {error ? <p className="form-error">{error}</p> : null}
         </div>
       </section>
     );
@@ -175,8 +217,9 @@ export function KioskFlow() {
           ) : null}
           <div className="row">
             <a className="button" href={ticket?.uploadUrl ?? "/order"}>Open upload link</a>
-            <button className="secondary" onClick={() => setStep("categories")} type="button">Start another order</button>
+            <button className="secondary" onClick={goHome} type="button">Done — back to start</button>
           </div>
+          <p className="muted-note">This screen returns to the start shortly for the next customer.</p>
         </div>
       </section>
     );
